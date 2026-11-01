@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const app = express();
+const deep = require('./engine/deep-routes');
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -67,13 +68,14 @@ app.use((req,res,next)=>{
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
  next();
 });
-app.use(express.json({limit:'80kb',verify:(req,res,b)=>{req.rawBody=Buffer.from(b);}}));
-function auth(req,res,next){
+app.use(express.json({limit:'800kb',verify:(req,res,b)=>{req.rawBody=Buffer.from(b);}}));
+async function auth(req,res,next){
  const s=getSession(req);if(!s)return res.status(401).json({error:'Unauthorized',code:'LOGIN_REQUIRED'});
  req.admin=s;
  if(['POST','PUT','PATCH','DELETE'].includes(req.method)){
    if(!secretEqual(req.headers['x-csrf-token']||'',csrf(s)))return res.status(403).json({error:'CSRF token invalid'});
  }
+ try { if(await deep.isRevoked(pool,s.n)) return res.status(401).json({error:'Session revoked'}); } catch(e) { return next(e); }
  next();
 }
 function route(fn){return (req,res,next)=>Promise.resolve(fn(req,res)).catch(next);}
@@ -131,6 +133,7 @@ CREATE INDEX IF NOT EXISTS gameops_players_last_seen_idx ON gameops_players(last
 `;
 async function initDB(){
  await pool.query(ddl);
+ await deep.ensureSchema(pool);
  for(const [name,slug,code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]){
   await pool.query("INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING",[name,slug,code]);
  }
@@ -140,20 +143,24 @@ app.get('/health',route(async(req,res)=>{
  catch{res.status(503).json({status:'degraded',db:'unavailable'});}
 }));
 app.get('/login',(req,res)=>getSession(req)?res.redirect('/engine'):res.sendFile(path.join(__dirname,'public','login.html')));
-app.get('/logout',(req,res)=>{res.clearCookie('gameops_session',{path:'/'});res.redirect('/login');});
+app.get('/logout',route(async(req,res)=>{const s=getSession(req);if(s)await deep.revoke(pool,s);res.clearCookie('gameops_session',{path:'/'});res.redirect('/login');}));
 app.post('/api/auth/login',(req,res)=>{
  if(!limit('login:'+(req.ip||'unknown'),8,15*60000))return error(res,429,'Too many login attempts');
  const {username,password}=req.body||{};
- if(!secretEqual(username,ADMIN_USERNAME) || !secretEqual(password,ADMIN_PASSWORD))return error(res,401,'Invalid credentials');
+ if(!secretEqual(username,ADMIN_USERNAME) || !secretEqual(password,ADMIN_PASSWORD)){deep.logLogin(pool,username,false,req.ip).catch(console.error);return error(res,401,'Invalid credentials');}
+ deep.logLogin(pool,username,true,req.ip).catch(console.error);
  const s=startSession(res);res.json({ok:true,username:ADMIN_USERNAME,csrf:csrf(s)});
 });
-app.get('/api/auth/session',(req,res)=>{
- const s=getSession(req); if(!s)return error(res,401,'Login required');
+app.get('/api/auth/session',route(async(req,res)=>{
+ const s=getSession(req);if(!s || await deep.isRevoked(pool,s.n))return error(res,401,'Login required');
  res.json({username:s.u,csrf:csrf(s),expiresAt:new Date(s.e).toISOString()});
-});
-app.post('/api/auth/logout',auth,(req,res)=>{res.clearCookie('gameops_session',{path:'/'});res.json({ok:true});});
+}));
+app.post('/api/auth/logout',auth,route(async(req,res)=>{await deep.revoke(pool,req.admin);res.clearCookie('gameops_session',{path:'/'});res.json({ok:true});}));
 app.get('/',(req,res)=>res.redirect(getSession(req)?'/engine':'/login'));
-app.get('/engine',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.html')):res.redirect('/login'));
+app.get('/engine',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','control.html')):res.redirect('/login'));
+app.get('/engine-v1',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.html')):res.redirect('/login'));
+app.get('/assets/control.js',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','control.js')):res.status(401).end());
+app.get('/assets/control.css',(req,res)=>res.sendFile(path.join(__dirname,'public','control.css')));
 app.get('/preview',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','preview.html')):res.redirect('/login'));
 app.get('/assets/engine.js',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.js')):res.status(401).end());
 app.get('/assets/engine.css',(req,res)=>res.sendFile(path.join(__dirname,'public','engine.css')));
@@ -260,6 +267,7 @@ app.post('/api/v1/game-events',route(async(req,res)=>{
   res.status(202).json({accepted:true,event_id:p.event_id});
  }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
 }));
+deep.mount(app,{pool,audit});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
 app.use((err,req,res,next)=>{

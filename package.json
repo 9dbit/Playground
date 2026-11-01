@@ -1,13 +1,14 @@
 {
   "name": "playground-gameops",
-  "version": "0.4.0",
+  "version": "0.7.0",
   "private": true,
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/engine.js"
+    "check": "node --check server.js && node --check engine/deep-routes.js && node --check public/control.js && node --check public/engine.js",
+    "test": "npm run check && node --test tests/*.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

@@ -1,20 +1,37 @@
-# Playground GameOps Engine
+# Playground · GameOps Control Center
 
-Standalone multi-game administrative control center for Skygate 5000, UNO LUCK and Mahjong Wild.
+Original multi-game administration console inspired by the **structure** of the Xaxino reference. Built on Node.js 20+, Express, and PostgreSQL.
 
-## Architecture
-Node 20+ / Express / PostgreSQL, authenticated admin APIs, signed game event ingestion, audit logging, and a responsive original UI. This project is **not** connected to the three game engines yet. Seeded game rows are catalog placeholders; all live telemetry begins at zero. Balances and approvals are not settled. No payment processor exists.
+## Live application
+- Login: https://playground-admin-production.up.railway.app/login
+- Health: https://playground-admin-production.up.railway.app/health
+- Admin: /engine (authentication required)
+- Previous UI: /engine-v1 (retained for rollback)
 
-## Start
-`npm install` → configure environment variables from `.env.example` → `npm start`.
+## Features
+- Deep sidebar navigation and 19 modules in System Settings
+- Games -> versioned Game Edit, artwork and per-game immutable event logs
+- Players -> User Detail, profile metadata, per-user rounds and event details
+- Ticket threads, virtual request review, admin login audit and notification records
+- Four report views (transfers intentionally unavailable), subscribers and basic content CMS
+- Public informational content, robots.txt, sitemap.xml and scoped maintenance mode
+- Signed inbound DEMO_COIN events; **no external game integration yet**
 
-API: `/health`, `/api/auth/session`, `/api/admin/{summary,games,players,rounds,settings,requests,tickets,audit,system}`, `POST /api/v1/game-events`.
+## Local development
+Configure from `.env.example` and set required variables. Start a PostgreSQL instance, then:
 
-## Railway
-Provision a Railway PostgreSQL service in the same project and supply `DATABASE_URL=${{Postgres.DATABASE_URL}}`. Generate strong separate secret values for ADMIN_PASSWORD, SESSION_SECRET and GAME_EVENT_SECRET. Never commit them. Set NODE_ENV=production. Default web port comes from PORT. Railway healthcheck /health requires a live database.
+```bash
+npm install
+npm test
+npm start
+```
 
-## Security / limitations
-Initial admin is a single environment-supplied credential. Before adding actual player identities, cash-equivalent funds, KYC, or additional operators, implement a proper identity provider and MFA, granular RBAC, CSRF rotation, IP protection, tenant isolation, signed game secrets per integration, backups and recovery, deployment observability, and automated tests. Do not use this starter for regulated gaming or payments.
+Database tables are created using additive, idempotent SQL on app startup.
 
-## Progress
-See `sources/PLAYGROUND_CHECKPOINT_04.md`.
+## Security
+Never copy secrets into GitHub or chat. The original single-admin login still requires credential rotation and MFA/RBAC for sensitive data.
+Logout revokes signed session nonces for API requests. Write actions retain CSRF validation.
+Real-money settlement, impersonation, live win-rate adjustment and external account verification are intentionally not supported.
+
+## Change log
+Read `sources/PLAYGROUND_CHECKPOINT_07.md`, which lists delivered features and remaining integration work.
