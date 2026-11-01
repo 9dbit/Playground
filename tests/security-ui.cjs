@@ -45,7 +45,7 @@ const sessions=[{id:account.sessionId,current:true,created_at:'2026-11-02T01:00:
   await page.locator('form[data-task="mfa/confirm"] [name=code]').fill('123456');await page.getByRole('button',{name:'Verify and enable'}).click();
   await page.locator('#recovery-codes').waitFor();assert.equal((await page.locator('#recovery-codes').inputValue()).split('\n').length,8);
   report.checks.push('MFA confirmation shows eight recovery codes');
-  await page.getByRole('button',{name:'I saved my codes'}).click();await page.getByRole('heading',{name:'Administrators & roles'}).waitFor();
+  await page.getByRole('button',{name:'I saved my codes'}).click();await page.locator('#recovery-codes').waitFor({state:'detached'});await page.getByRole('heading',{name:'Administrators & roles'}).waitFor();
   assert.equal(await page.locator('#recovery-codes').count(),0);report.checks.push('recovery codes dismissed from UI');
   await page.getByText('Create an administrator',{exact:true}).click();await page.locator('form[data-task=admins]').waitFor({state:'visible'});
   assert.equal(await page.locator('form[data-task=admins] [name=role] option').count(),4);report.checks.push('owner has four role choices and reauthentication fields');
