@@ -156,7 +156,7 @@ app.get('/',(req,res)=>res.redirect(getSession(req)?'/engine':'/login'));
 app.get('/engine',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.html')):res.redirect('/login'));
 app.get('/preview',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','preview.html')):res.redirect('/login'));
 app.get('/assets/engine.js',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.js')):res.status(401).end());
-app.get('/assets/engine.css',(req,res)=>getSession(req)?res.sendFile(path.join(__dirname,'public','engine.css')):res.status(401).end());
+app.get('/assets/engine.css',(req,res)=>res.sendFile(path.join(__dirname,'public','engine.css')));
 app.use('/api/admin',auth);
 app.get('/api/admin/summary',route(async(req,res)=>{
  const [g,p,r,ev]=await Promise.all([
