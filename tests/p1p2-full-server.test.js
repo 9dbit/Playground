@@ -23,6 +23,16 @@ const validSettings = {
   css: { draft: '/* stored, not executed */' }, sitemap: { enabled: true, endpoint: '/sitemap.xml' },
   robots: { rules: 'User-agent: *\nDisallow: /api/\n' }
 };
+function literalRoutes(text) {
+  // A string prefix in app.get('/assets/' + filename, ...) is not a full route.
+  return [...text.matchAll(/app\.(get|post|put|patch|delete)\('([^']+)'\s*,/g)]
+    .map(match => match[1] + ' ' + match[2].replace(/:[^/]+/g, ':param'));
+}
+test('route guard distinguishes complete literal routes from dynamic asset prefixes', () => {
+  const exact = literalRoutes("app.get('/x/:id',fn); app.get('/x/:gid',fn); app.get('/assets/' + filename,fn)");
+  assert.deepEqual(exact, ['get /x/:param', 'get /x/:param']);
+  assert.equal(new Set(exact).size, 1, 'Different parameter names must not hide duplicate routes');
+});
 test('settings schemas cover 15 form modules and reject unknown or incorrectly typed fields', () => {
   assert.equal(Object.keys(schemas).length, 15);
   for (const [key, value] of Object.entries(validSettings)) assert.equal(validateSetting(key, value).valid, true, key);
@@ -92,11 +102,11 @@ test('CP14: all P1/P2 findings closed through actual server.js and PostgreSQL', 
     assert.equal((await req('/api/admin/deep/games/' + gid + '/rounds?limit=101')).status, 400);
     const routes = [];
     for (const name of ['server.js', ...fs.readdirSync(path.join(ROOT, 'engine')).filter(x => x.endsWith('.js')).map(x => 'engine/' + x)]) {
-      const text = fs.readFileSync(path.join(ROOT, name), 'utf8');
-      for (const match of text.matchAll(/app\.(get|post|put|patch|delete)\('([^']+)'/g)) routes.push(match[1] + ' ' + match[2].replace(/:[^/]+/g, ':param'));
+      routes.push(...literalRoutes(fs.readFileSync(path.join(ROOT, name), 'utf8')));
     }
-    assert.equal(new Set(routes).size, routes.length, 'Duplicate canonical route declarations');
-    return { totalFiltered: r.data.total, pageSize: r.data.items.length, duplicateRoutes: 0 };
+    const duplicates = routes.filter((route, index) => routes.indexOf(route) !== index);
+    assert.deepEqual(duplicates, [], 'Duplicate fully literal canonical routes; dynamic asset prefixes are not routes');
+    return { totalFiltered: r.data.total, pageSize: r.data.items.length, duplicateRoutes: 0, literalRouteCount: routes.length };
   });
   await check('F05', 'older blocked users are found before pagination, with stable counts and search', async () => {
     const r = await req('/api/admin/deep/players?state=banned&limit=25&page=1');
