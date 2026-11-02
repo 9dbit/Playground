@@ -13,3 +13,19 @@
 #profile-save .status-line{gap:14px}
 #profile-save input[name=displayName]{max-width:600px}
 @media(max-width:700px){.topbar .top-actions{gap:4px}.top-actions .icon-btn{padding:7px 8px;font-size:11px}.notif-count{min-width:16px;height:16px;font-size:9px}.global-search{width:100%}}
+
+/* Small-screen compact header: keep bell, profile, sign out and search usable. */
+@media(max-width:720px){
+ .topbar{gap:4px;padding:0 8px;min-width:0}
+ .topbar .top-left{flex:1;gap:5px;min-width:0}
+ .topbar .top-left>.search{min-width:32px;width:34px;flex:0 0 34px;font-size:0;padding:7px 4px;text-align:center}
+ .topbar .top-left>.search::before{content:"⌕";font-size:18px}
+ .topbar .top-actions{flex:0 0 auto;gap:4px;min-width:0}
+ .topbar .top-actions [data-cp08-security]{display:none}
+ .topbar .top-actions [data-go=activity]{display:inline-flex;align-items:center;justify-content:center}
+ .topbar .top-actions [data-go=profile],.topbar .top-actions [data-action=logout]{font-size:0;width:32px;height:34px;padding:7px 4px;text-align:center}
+ .topbar .top-actions [data-go=profile]::before{content:"◉";font-size:16px}
+ .topbar .top-actions [data-action=logout]::before{content:"⏻";font-size:16px}
+ .topbar .top-actions [data-action=refresh]{width:32px;height:34px;padding:7px 4px}
+ .main .head .actions{max-width:100%}
+}

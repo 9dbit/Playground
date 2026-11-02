@@ -86,7 +86,7 @@ test('live Dashboard operations with isolated PostgreSQL persistence',{skip:!pro
  assert.ok(pages.data.items.some(x=>x.type==='Content'&&x.route==='content-edit/page/'+content));
  const bobSearch=await request(prefix+'search?q=demo','GET',undefined,'bob');
  assert.equal(bobSearch.data.items.length,0,'Viewer must not see player search matches');
- const pct=await request(prefix+'search?q=%25');
+ const pct=await request(prefix+'search?q=%25_');
  assert.equal(pct.data.items.length,0,'Search cannot treat percent as a SQL wildcard');
  const a0=await request(prefix+'notifications');
  assert.equal(a0.data.unread,2);
