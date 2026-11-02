@@ -35,7 +35,7 @@ with sync_playwright() as p:
  page.locator('#modal-form input[name=amount]').fill('20')
  page.locator('#modal-form input[name=note]').fill('QA sandbox virtual credit')
  page.locator('#modal-form button.btn').last.click()
- page.wait_for_function("document.querySelector('.stats')?.innerText.includes('120') === true",timeout=10000)
+ page.locator('.stats').get_by_text('120',exact=True).wait_for(timeout=10000)
  assert '120' in page.locator('.stats').inner_text()
  checks.append('synthetic virtual credits update browser-only balance and ledger')
  page.goto(base+'/engine#/parity');page.locator('.parity-row').first.wait_for()
