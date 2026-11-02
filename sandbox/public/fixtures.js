@@ -9,13 +9,17 @@ function seed(){
  const games=['Skygate 5000','UNO LUCK','Mahjong Wild'].map((name,i)=>({id:`10000000-0000-4000-8000-00000000000${i+1}`,name:name+' [DEMO]',slug:['skygate-5000','uno-luck','mahjong-wild'][i],code:['SK','UN','MW'][i],platform:'Browser fixture',build_version:'simulation',version:1,status:'Maintenance',rounds:'2',demo_chance:50,winning_chance:50,win_amount:50,invest_enabled:false,min_invest:1,max_invest:1000,trending:false,featured:false,instructions:'Synthetic instructions for UI testing only.',has_image:false,image:null}));
  const players=games.map((g,i)=>({id:`20000000-0000-4000-8000-00000000000${i+1}`,game_id:g.id,game:g.name,player_ref:'demo-player-'+(i+1),first_name:'Demo',last_name:String(i+1),city:'',state:'',zip:'',country:'',admin_note:'Synthetic fixture. Not a customer.',local_status:'active',version:1,rounds:'2',total_played:'800',total_win:'600',net_return:'-200',last_seen:now()}));
  const rounds=games.flatMap((g,i)=>[0,1].map(j=>({id:String(i*2+j+1),event_id:`demo-event-${i}-${j}`,round_id:`demo-round-${i}-${j}`,game:g.name,game_id:g.id,player_ref:players[i].player_ref,stake:'400',payout:j?'0':'600',currency:'DEMO_COIN',occurred_at:now(),ingested_at:now()})));
- return {games,players,rounds,wallets:players.map(p=>({id:p.id,player_id:p.id,balance:'100',entries:[]})),walletOperations:[],requests:[{id:'30000000-0000-4000-8000-000000000001',player_ref:'demo-player-1',amount:'1000',status:'pending',note:'Synthetic request',created_at:now(),reviewed_at:null}],tickets:[{id:'40000000-0000-4000-8000-000000000001',subject:'DEMO: test ticket workflow',requester_ref:'demo-player-1',priority:'Medium',status:'Open',created_at:now(),messages:[]}],subscribers:[{id:uuid(),contact:'demo@example.invalid',status:'subscribed',created_at:now()}],notifications:[],audit:[],settings:[{key:'general',value:{site_title:'Playground SANDBOX',base_color:'#4939f5',currency:'DEMO_COIN'},version:1,updated_at:now()}],content:['page','policy','template','frontend'].map(kind=>({id:uuid(),kind,slug:'demo-'+kind,title:'Demo '+kind,body:'Synthetic content. Nothing here is published to production.',status:'draft',version:1,created_at:now(),updated_at:now()}))};
+ return {games,players,rounds,wallets:players.map(p=>({id:p.id,player_id:p.id,balance:'100',entries:[]})),walletOperations:[],adminActivity:[{id:'1',actor:'sandbox-demo',action:'game.created',resource:games[0].id,created_at:now()},{id:'2',actor:'sandbox-demo',action:'ticket.created',resource:'40000000-0000-4000-8000-000000000001',created_at:now()}],activityRead:[],profile:{displayName:'Sandbox Administrator'},cronRuns:[],requests:[{id:'30000000-0000-4000-8000-000000000001',player_ref:'demo-player-1',amount:'1000',status:'pending',note:'Synthetic request',created_at:now(),reviewed_at:null}],tickets:[{id:'40000000-0000-4000-8000-000000000001',subject:'DEMO: test ticket workflow',requester_ref:'demo-player-1',priority:'Medium',status:'Open',created_at:now(),messages:[]}],subscribers:[{id:uuid(),contact:'demo@example.invalid',status:'subscribed',created_at:now()}],notifications:[],audit:[],settings:[{key:'general',value:{site_title:'Playground SANDBOX',base_color:'#4939f5',currency:'DEMO_COIN'},version:1,updated_at:now()}],content:['page','policy','template','frontend'].map(kind=>({id:uuid(),kind,slug:'demo-'+kind,title:'Demo '+kind,body:'Synthetic content. Nothing here is published to production.',status:'draft',version:1,created_at:now(),updated_at:now()}))};
 }
 let db;
 try{const parsed=JSON.parse(sessionStorage.getItem(KEY)||'null');db=parsed&&Array.isArray(parsed.games)&&Array.isArray(parsed.content)?parsed:seed();}catch{db=seed();}
 if(!Array.isArray(db.wallets))db.wallets=db.players.map(p=>({id:p.id,player_id:p.id,balance:'100',entries:[]}));
 db.wallets.forEach(w=>{if(!w.id)w.id=w.player_id});
 if(!Array.isArray(db.walletOperations))db.walletOperations=[];
+if(!Array.isArray(db.adminActivity))db.adminActivity=seed().adminActivity;
+if(!Array.isArray(db.activityRead))db.activityRead=[];
+if(!db.profile)db.profile={displayName:'Sandbox Administrator'};
+if(!Array.isArray(db.cronRuns))db.cronRuns=[];
 function save(){try{sessionStorage.setItem(KEY,JSON.stringify(db));}catch{throw Object.assign(Error('Browser fixture storage is full. Use Reset data uji.'),{status:507});}}
 function error(message,status=400){throw Object.assign(Error(message),{status});}
 function one(items,id){const item=items.find(x=>x.id===id);if(!item)error('Synthetic record not found',404);return item;}
@@ -36,6 +40,37 @@ window.fetch=async(input,opts={})=>{
    if(p==='/api/admin/summary'){const stake=db.rounds.reduce((a,x)=>a+Number(x.stake),0),payout=db.rounds.reduce((a,x)=>a+Number(x.payout),0);result={gameCount:db.games.length,activeGames:db.games.filter(x=>x.status==='Active').length,players:db.players.length,pendingRequests:db.requests.filter(x=>x.status==='pending').length,rounds:db.rounds.length,stake:String(stake),payout:String(payout),margin:String(stake-payout),currency:'DEMO_COIN',sample:true,asOf:now()};}
    else if(p==='/api/admin/deep/summary')result={games:{total:db.games.length,active:db.games.filter(x=>x.status==='Active').length},players:{total:db.players.length},tickets:{total:db.tickets.length,open:db.tickets.filter(x=>x.status!=='Closed').length},subscribers:db.subscribers.length,published:db.content.filter(x=>x.status==='published').length,integratedEngines:0};
 
+
+   else if(p==='/api/admin/ops/notifications'){
+    const items=db.adminActivity.map(x=>({...x,is_read:db.activityRead.includes(x.id)}));
+    const limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit')||20)));
+    result={items:items.slice(0,limit),unread:items.filter(x=>!x.is_read).length,
+      scope:'browser_fixture',source:'synthetic_activity',externalDelivery:false,
+      note:'Synthetic browser-only activity. No registration, real messages or external events.'};
+   }
+   else if(p==='/api/admin/ops/search'){
+    const q=(u.searchParams.get('q')||'').trim().toLowerCase();
+    if(q.length<2||q.length>80)error('Search query must contain 2 to 80 characters');
+    const items=[];
+    for(const g of db.games)if(g.name.toLowerCase().includes(q)||g.slug.toLowerCase().includes(q))
+      items.push({type:'Game',label:g.name,route:'game/'+g.id,subtitle:'Sandbox game record'});
+    for(const x of db.players)if(x.player_ref.toLowerCase().includes(q))
+      items.push({type:'Player',label:x.player_ref,route:'player/'+x.id,subtitle:'Synthetic player'});
+    for(const x of db.tickets)if(x.subject.toLowerCase().includes(q))
+      items.push({type:'Ticket',label:x.subject,route:'ticket/'+x.id,subtitle:'Synthetic support ticket'});
+    for(const x of db.content)if(x.title.toLowerCase().includes(q)||x.slug.toLowerCase().includes(q))
+      items.push({type:'Content',label:x.title,route:'content-edit/'+x.kind+'/'+x.id,subtitle:'Synthetic content'});
+    result={query:q,items:items.slice(0,24),source:'browser_fixtures',limit:24};
+   }
+   else if(p==='/api/admin/ops/profile'){
+    result={item:{id:'sandbox-admin',username:'sandbox-demo',displayName:db.profile.displayName,role:'owner',status:'simulation',mfaEnabled:false},
+      passwordChangeUrl:null,mfaUrl:null,avatarUploadAvailable:false};
+   }
+   else if(p==='/api/admin/ops/cron'){
+    result={enabled:false,intervalMinutes:10,lastRun:db.cronRuns[0]||null,history:db.cronRuns,
+      job:'synthetic_session_cleanup',externalVendorCron:false,remoteGameCron:false,
+      note:'SIMULATION ONLY. Automatic scheduling and real expired sessions are not present.'};
+   }
    else if(p==='/api/admin/parity'){
     const list=[['Dashboard','Dashboard','dashboard','partial'],['Manage Games','Games','games','partial'],
       ['Manage Games','Game Edit','games','partial'],['Manage Users','All Users','players/all','partial'],
@@ -74,9 +109,33 @@ window.fetch=async(input,opts={})=>{
    else if(p==='/api/admin/audit')result={items:db.audit};
    else if(p==='/api/admin/deep/subscribers')result={items:db.subscribers};
    else if((match=matches(/^\/api\/admin\/deep\/content\/([^/]+)(?:\/([^/]+))?$/,p)))result=match[2]?{item:one(db.content.filter(x=>x.kind===match[1]),match[2])}:{items:db.content.filter(x=>x.kind===match[1])};
-   else if((match=matches(/^\/api\/admin\/deep\/reports\/([^/]+)$/,p)))result={items:match[1]==='transactions'?db.rounds:match[1]==='notifications'?db.notifications:match[1]==='transfers'?db.walletOperations.filter(x=>x.action==='transfer'):[],notice:'BROWSER SIMULATION. No real bank transactions, login history, or external delivery.'};
-   else if(p==='/api/admin/system'||p.startsWith('/api/admin/deep/system/'))result={name:p.split('/').at(-1),appVersion:'sandbox-1.0.0',readOnly:true,dbConnected:false,mfaEnabled:false,rbacEnabled:false,gameControlConnected:false,asOf:now(),message:'Static development preview only. No real accounts or operational services.'};
+   else if((match=matches(/^\/api\/admin\/deep\/reports\/([^/]+)$/,p))){
+    const filter=u.searchParams.get('result')||'all';
+    if(match[1]==='transactions'&&!['all','win','loss','draw'].includes(filter))error('Invalid result filter');
+    const rounds=db.rounds.map(x=>({...x,result:Number(x.payout)>Number(x.stake)?'win':Number(x.payout)<Number(x.stake)?'loss':'draw'}));
+    result={items:match[1]==='transactions'?rounds.filter(x=>filter==='all'||filter===x.result):
+      match[1]==='notifications'?db.notifications:match[1]==='transfers'?db.walletOperations.filter(x=>x.action==='transfer'):[],
+      notice:'BROWSER SIMULATION. No external round settlement or bank transactions.'};
+   }
+   else if(p==='/api/admin/system'||p.startsWith('/api/admin/deep/system/'))result={name:p.split('/').at(-1),appVersion:'sandbox-1.1.0',readOnly:true,dbConnected:false,mfaEnabled:false,rbacEnabled:false,gameControlConnected:false,asOf:now(),message:'Static development preview only. No real accounts or operational services.'};
    else error('This preview route is not simulated',501);
+  }else if(m==='POST'&&p==='/api/admin/ops/notifications/read-all'){
+   for(const x of db.adminActivity)if(!db.activityRead.includes(x.id))db.activityRead.push(x.id);
+   result={ok:true,marked:db.activityRead.length};
+  }else if(m==='POST'&&(match=matches(/^\/api\/admin\/ops\/notifications\/([0-9]+)\/read$/,p))){
+   if(!db.adminActivity.some(x=>x.id===match[1]))error('Synthetic activity not found',404);
+   if(!db.activityRead.includes(match[1]))db.activityRead.push(match[1]);
+   result={ok:true,id:match[1]};
+  }else if(m==='PUT'&&p==='/api/admin/ops/profile'){
+   const name=String(b.displayName||'').trim();
+   if(name.length<2||name.length>80||/[<>]/.test(name))error('Invalid display name');
+   db.profile.displayName=name;
+   result={ok:true,item:{username:'sandbox-demo',displayName:name,role:'owner',status:'simulation'}};
+  }else if(m==='POST'&&p==='/api/admin/ops/cron/run'){
+   const run={id:String(db.cronRuns.length+1),actor:'sandbox-demo',status:'completed',
+     cleaned_revocations:0,cleaned_sessions:0,started_at:now(),finished_at:now()};
+   db.cronRuns.unshift(run);db.cronRuns=db.cronRuns.slice(0,20);
+   result={ok:true,status:'completed',run,manual:true,simulation:true};
   }else if(m==='POST'&&p==='/api/admin/games'){
    if(!b.name||!b.slug||!b.code)error('Name, slug and code are required');if(db.games.length>=30)error('Fixture capacity reached; reset demo');
    if(db.games.some(x=>x.slug===b.slug))error('Demo slug already exists',409);

@@ -15,7 +15,7 @@ with sync_playwright() as p:
  checks.append('anonymous browser opens dashboard directly; no login or MFA')
  page.screenshot(path=str(out/'sandbox-desktop.png'),full_page=True)
  gid='10000000-0000-4000-8000-000000000001';pid='20000000-0000-4000-8000-000000000001';tid='40000000-0000-4000-8000-000000000001'
- routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','parity','wallet/'+pid,'game/'+gid,'game-rounds/'+gid,'player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
+ routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','parity','activity','cron','profile','report/transactions/win','report/transactions/loss','wallet/'+pid,'game/'+gid,'game-rounds/'+gid,'player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
  routes+=['setting/'+s for s in ['general','logo','configuration','notification','seo','kyc','social','language','extensions','cron','maintenance','gdpr','css','sitemap','robots']]
  for r in routes:
   page.goto(base+'/engine#/'+r);page.locator('h1').wait_for();assert page.locator('h1').inner_text()!='Load failed',r
@@ -41,6 +41,32 @@ with sync_playwright() as p:
  page.goto(base+'/engine#/parity');page.locator('.parity-row').first.wait_for()
  assert page.locator('.parity-row').count()>=19
  checks.append('functional parity matrix visible with blocked/partial states')
+ page.goto(base+'/engine#/activity');page.get_by_role('heading',name='Notification Center').wait_for()
+ assert page.locator('[data-action=activity-read]').count()==2
+ page.locator('[data-action=activity-read]').first.click()
+ page.get_by_text('1 unread').wait_for()
+ page.locator('[data-action=activity-read-all]').click()
+ page.get_by_text('0 unread').wait_for()
+ checks.append('synthetic notification read/unread is stored locally')
+ page.goto(base+'/engine#/profile');page.locator('#profile-save').wait_for()
+ assert page.locator('#profile-save input[name=username]').count()==0
+ page.locator('#profile-save input[name=displayName]').fill('Sandbox QA')
+ page.locator('#profile-save button[type=submit]').click()
+ page.locator('#profile-save input[name=displayName]').wait_for()
+ assert page.locator('#profile-save input[name=displayName]').input_value()=='Sandbox QA'
+ checks.append('sandbox profile display name edits persist in tab only')
+ page.goto(base+'/engine#/cron');page.get_by_role('heading',name='Cron Setup').wait_for()
+ page.locator('[data-action=cron-run]').click()
+ page.get_by_text('completed',exact=True).first.wait_for()
+ checks.append('manual cron is a browser-only simulated history')
+ page.goto(base+'/engine#/report/transactions/win');page.get_by_role('heading',name='Transaction History').wait_for()
+ assert page.locator('.table tbody tr').count()>=1
+ checks.append('derived win status filters synthetic round records')
+ page.goto(base+'/engine#/dashboard');page.locator('[data-action=search]').click()
+ page.locator('#global-query').fill('demo-player-1')
+ page.locator('#global-results').get_by_text('demo-player-1').wait_for()
+ page.locator('[data-action=close]').click()
+ checks.append('global search queries synthetic browser records and navigation')
  page.goto(base+'/engine#/ticket/'+tid);page.locator('#ticket-reply').wait_for()
  page.locator('textarea[name=body]').fill('Synthetic browser-only reply');page.locator('#ticket-reply button').click()
  page.get_by_text('Synthetic browser-only reply',exact=True).wait_for();checks.append('local ticket reply flow works')

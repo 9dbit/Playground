@@ -11,3 +11,5 @@ UI source: 9dbit/Playground main 88c039ea8679bb89b0928296b82e225cb6b022fe (Check
 Run `npm test`, then `npm start` (no npm dependencies). CI separately tests 56 menu/detail paths, local edits, reset and per-browser isolation using Playwright.
 
 PR #5's production development-link access remains unmerged and was NOT activated. This new static application does not include its authentication changes.
+
+Checkpoint 11 update: global search, read/unread activity, profile editing, cron job history and manual-run UI are strictly synthetic browser-tab fixtures. No real cron timer, session cleanup, admin login, outbound traffic or server API is enabled.
