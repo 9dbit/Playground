@@ -1,0 +1,75 @@
+name: CP15 Source Assembly Acceptance
+on:
+  push:
+    branches: [feat/cp15-game-data-20261103]
+    paths: [tools/apply-cp15.py, tools/cp15-part-*.txt, .github/workflows/cp15-prepare.yml]
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: gameops_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_ephemeral_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gameops_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci_ephemeral_only@127.0.0.1:5432/gameops_ci
+      UNO_CP15_ROOT: ${{ github.workspace }}/uno-source
+      GAMEOPS_ADDITIONAL_KEYS: '[]'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 9dbit/uno-luck
+          ref: 5c060f8562aa98554f9fb064710042f07c658b40
+          path: uno-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Verify payload and original blob hashes then apply
+        run: python tools/apply-cp15.py | tee cp15-hashes.log
+      - run: npm ci --no-audit --no-fund
+      - run: pip install -r uno-source/requirements.txt pytest==9.0.2 httpx==0.28.1 Pillow
+      - run: npm test | tee cp15-regression.log
+      - run: npm install --no-save playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Full original CP14 acceptance
+        run: CP14_BROWSER=true node tests/cp14-server.cjs
+      - name: Actual UNO source, outbox, receiver and browser
+        run: node tests/cp15-live.cjs
+      - name: Publish verified generated source only to feature branch
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+          BRANCH: feat/cp15-game-data-20261103
+        run: |
+          test "$(git ls-remote origin refs/heads/$BRANCH | cut -f1)" = "$EXPECTED_HEAD"
+          git add engine public server.js package.json package-lock.json tests sources
+          git rm tools/apply-cp15.py tools/cp15-part-*.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(cp15): signed persistent source observations, reconciliation and exact scoped reports'
+          git push origin HEAD:refs/heads/$BRANCH
+          git rev-parse HEAD > cp15-published-sha.txt
+      - name: Archive test results and generated source for review
+        if: always()
+        run: |
+          mkdir -p cp15-evidence
+          cp cp15-hashes.log cp15-regression.log cp15-published-sha.txt cp15-evidence/ 2>/dev/null || true
+          cp -R test-results cp15-evidence/ || true
+          tar -cf cp15-evidence/generated-source.tar engine public tests sources server.js package.json package-lock.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cp15-assembly-evidence
+          path: cp15-evidence/
+          retention-days: 14
