@@ -1,6 +1,7 @@
 'use strict';
 // Deny by default. Both original and deep APIs are covered; the UI is not an authorization boundary.
 const rules = [
+  ['GET', /^\/bridge(?:\/[a-z0-9-]+\/rounds)?\/?$/, ['owner', 'operator', 'support', 'viewer']],
   ['GET', /^\/(?:summary|deep\/summary)\/?$/, ['owner', 'operator', 'support', 'viewer']],
   ['GET', /^\/(?:games(?:\/[^/]+)?|deep\/games(?:\/[^/]+(?:\/(?:image|rounds))?)?)\/?$/, ['owner', 'operator', 'support', 'viewer']],
   ['POST', /^\/(?:games|deep\/games\/[^/]+\/image)\/?$/, ['owner', 'operator']],

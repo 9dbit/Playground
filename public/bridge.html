@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0a1548"><title>Game Bridge | Playground</title><link rel="stylesheet" href="/assets/bridge.css"></head>
+<body><header><a class="brand" href="/engine">PLAY<span>GROUND</span><small>GAME BRIDGE</small></a><nav><a href="/engine">Dashboard</a><a href="/security">Security</a></nav></header>
+<main><div class="heading"><div><p class="eyebrow">INTEGRATIONS / CP09</p><h1>Game Bridge</h1><p>Signed connections. Explicit data readiness.</p></div><button id="refresh" type="button">Refresh</button></div>
+<div class="notice">An online heartbeat confirms the server connection, not round ingestion. This bridge cannot change game rules, balances or payouts.</div>
+<div id="status" role="status">Checking access...</div><section id="metrics" class="metrics" aria-label="Connection totals"></section><section id="games" class="games" aria-label="Game integrations"></section>
+<section id="observations" hidden><div class="heading"><div><p class="eyebrow">READ ONLY / DEMO COIN</p><h2 id="observations-title">Round observations</h2></div><button id="close" type="button">Close</button></div><p class="subtle">Exact decimal strings, separate from legacy counters and wallet settlement.</p><div class="table-wrap"><table><thead><tr><th>Round</th><th>Environment</th><th>Stake</th><th>Payout</th><th>Occurred</th></tr></thead><tbody id="rows"></tbody></table></div><button id="older" hidden type="button">Older records</button></section>
+<footer id="updated">Waiting for server data.</footer></main><script src="/assets/bridge-ui.js" defer></script></body></html>

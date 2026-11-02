@@ -43,6 +43,7 @@ jobs:
       - run: npm install --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - run: node tests/security-ui.cjs
+      - run: node tests/bridge-ui.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
