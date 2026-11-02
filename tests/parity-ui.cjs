@@ -20,7 +20,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async route=>{
   const req=route.request(),u=new URL(req.url()),p=u.pathname;
-  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/parity.css':'parity.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
+  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/parity.css':'parity.css','/assets/admin-ops.css':'admin-ops.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
   if(files[p]){
    const file=files[p];return route.fulfill({status:200,contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'application/javascript',body:fs.readFileSync(path.join(root,file))});
   }
@@ -84,10 +84,7 @@ try{
  assert.equal(writes.find(x=>x.type==='wallet')?.body.amount,35);
  assert.ok(writes.find(x=>x.type==='wallet')?.body.idempotency_key);
  await page.setViewportSize({width:390,height:844});
- const mobileLayout=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,width:innerWidth,offenders:[...document.querySelectorAll('body *')].map(x=>({tag:x.tagName,cls:x.className?.toString().slice(0,80),txt:(x.textContent||'').trim().slice(0,30),right:Math.ceil(x.getBoundingClientRect().right),scroll:x.scrollWidth})).filter(x=>x.right>innerWidth+2).slice(0,12)}));
- console.log('CP11_MOBILE_LAYOUT '+JSON.stringify(mobileLayout));
- assert.equal(mobileLayout.scrollWidth>mobileLayout.width,false);
- fs.mkdirSync('test-results',{recursive:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:'test-results/parity-wallet-mobile.png',fullPage:true});
  assert.equal(errors.length,0,'No JS errors');
  const report={result:'PASS',checks:['functional QA visibility/filter','three distinct game demo fields save','player wallet drilldown','audited adjustment payload','390px no overflow'],errors};
