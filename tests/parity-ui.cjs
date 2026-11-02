@@ -84,7 +84,9 @@ try{
  assert.equal(writes.find(x=>x.type==='wallet')?.body.amount,35);
  assert.ok(writes.find(x=>x.type==='wallet')?.body.idempotency_key);
  await page.setViewportSize({width:390,height:844});
- assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ const mobileLayout=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,width:innerWidth,offenders:[...document.querySelectorAll('body *')].map(x=>({tag:x.tagName,cls:x.className?.toString().slice(0,80),txt:(x.textContent||'').trim().slice(0,30),right:Math.ceil(x.getBoundingClientRect().right),scroll:x.scrollWidth})).filter(x=>x.right>innerWidth+2).slice(0,12)}));
+ console.log('CP11_MOBILE_LAYOUT '+JSON.stringify(mobileLayout));
+ assert.equal(mobileLayout.scrollWidth>mobileLayout.width,false);
  fs.mkdirSync('test-results',{recursive:true});
  await page.screenshot({path:'test-results/parity-wallet-mobile.png',fullPage:true});
  assert.equal(errors.length,0,'No JS errors');
