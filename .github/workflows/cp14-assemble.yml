@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 maintenance/cp14-source.py
           python3 maintenance/cp14-ui.py
+          python3 maintenance/cp14-tests.py
           python3 -c "from pathlib import Path; p=Path('engine/deep-routes.js'); p.write_text('\n'.join(x.rstrip() for x in p.read_text().splitlines())+'\n')"
           git diff --check
       - name: Resolve and lock dependencies
@@ -56,7 +57,7 @@ jobs:
           node tests/game-detail-ui.cjs
       - name: Prepare verified source commit
         run: |
-          rm maintenance/cp14-source.py maintenance/cp14-ui.py .github/workflows/cp14-assemble.yml
+          rm maintenance/cp14-source.py maintenance/cp14-ui.py maintenance/cp14-tests.py .github/workflows/cp14-assemble.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add engine public tests package.json package-lock.json server.js sources .github/workflows maintenance
