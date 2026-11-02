@@ -38,7 +38,7 @@ function filteredRounds(url,onlyPlayer){
    const req=route.request(),u=new URL(req.url()),p=u.pathname;
    const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css',
      '/assets/parity.css':'parity.css','/assets/admin-ops.css':'admin-ops.css',
-     '/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
+     '/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js','/assets/data-nav.js':'data-nav.js'};
    if(files[p])return route.fulfill({status:200,
     contentType:p==='/engine'?'text/html':p.endsWith('.css')?'text/css':'application/javascript',
     body:fs.readFileSync(path.join(root,files[p]))});

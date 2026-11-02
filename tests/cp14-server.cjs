@@ -36,7 +36,7 @@ async function main(){
  rootPool=new Pool({connectionString:url.toString()});schema='cp14_'+crypto.randomBytes(8).toString('hex');await rootPool.query('CREATE SCHEMA '+schema);url.searchParams.set('options','-c search_path='+schema+',public');pool=new Pool({connectionString:url.toString()});
  const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));const port=listener.address().port;await new Promise(r=>listener.close(r));baseUrl='http://127.0.0.1:'+port;
  const secret=crypto.randomBytes(48).toString('hex');env={...process.env,DATABASE_URL:url.toString(),SESSION_SECRET:secret,ADMIN_USERNAME:'qa_owner',ADMIN_PASSWORD:crypto.randomBytes(32).toString('base64url'),PORT:String(port),NODE_ENV:'test',PUBLIC_SITE_URL:baseUrl,RAILWAY_PUBLIC_DOMAIN:'',GAMEOPS_BRIDGE_KEYS:'[]',DEV_ACCESS_ENABLED:'false'};
- await start();assert.equal((await req('/health','GET',undefined,null)).data.version,'0.14.0');
+ await start();assert.equal((await req('/health','GET',undefined,null)).data.version,require('../package.json').version);
  const owner=(await pool.query("UPDATE gameops_admin_accounts SET must_change_password=false,mfa_enabled=true WHERE username='qa_owner' RETURNING id,password_hash")).rows[0];
  for(const role of ['owner','operator','support','viewer']){
   const username='qa_'+role,id=role==='owner'?owner.id:(await pool.query("INSERT INTO gameops_admin_accounts(username,display_name,role,password_hash,must_change_password,mfa_enabled) VALUES($1,$1,$2,$3,false,true) RETURNING id",[username,role,owner.password_hash])).rows[0].id;
