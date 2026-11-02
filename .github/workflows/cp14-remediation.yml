@@ -31,22 +31,27 @@ jobs:
         with:
           node-version: '22'
       - name: Install pinned dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+        run: npm ci --no-audit --no-fund
       - name: Regression and full-server acceptance tests
         run: npm test | tee cp14-regression.log
-      - name: Package review source and native QA dependencies
+      - name: Install browser tooling
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser acceptance against actual server and PostgreSQL
+        run: node tests/p1p2-live-browser.cjs
+      - name: Package review source
         if: always()
         run: |
           git archive --format=tar.gz --output=cp14-source.tar.gz HEAD
-          tar -czf cp14-node-dependencies.tar.gz node_modules package-lock.json
+          git rev-parse HEAD > cp14-tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: cp14-release-evidence
           path: |
             cp14-source.tar.gz
-            cp14-node-dependencies.tar.gz
+            cp14-tested-commit.txt
             cp14-regression.log
             test-results/
           retention-days: 14
