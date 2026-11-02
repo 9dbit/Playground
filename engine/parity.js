@@ -5,7 +5,9 @@ const roots=[
 ['Manage Games','games',[
  ['Games','games','partial','Registry and editor save; remote game runtime settings not connected.'],
  ['Game Log','rounds','partial','Signed ingested rounds visible; all external round streams not yet enabled.'],
- ['Game Edit','games','partial','Name, artwork, demo chance, limits, trending, featured and instructions stored. Rich editor and other reference fields still missing.']]],
+ ['Game Edit','games','partial','Two additional demo-only chance/amount fields now persisted; rich editor is limited and remote game settings not connected.'],
+ ['Per-game Game Log','games','partial','Game-scoped observed rounds with query, derived outcome filters and pagination; signed upstream completeness unverified.'],
+ ['Player Game Log','players/all','partial','Player-scoped game events and pagination available; game-user identity and login activity not connected.']]],
 ['Manage Users','players/all',[
  ['Active Users','players/active','partial','Activity derives from local records; external account status not verified.'],
  ['Banned Users','players/banned','partial','Local flag only, no external game enforcement.'],
@@ -107,7 +109,7 @@ function mount(app,{pool}){
    const service={database:'connected',adminAccounts:!!schema.admin_accounts,gameProfiles:!!schema.game_profiles,
     virtualWallet:!!schema.wallets&&!!schema.wallet_entries&&!!schema.wallet_operations,
     externalGameWallet:false,playerIdentityProvider:false,kycProvider:false,paymentProvider:false};
-   res.json({version:'checkpoint-11',reference:'Xaxino v4.0 admin demo, screenshots and existing navigation inventory',
+   res.json({version:'checkpoint-12',reference:'Xaxino v4.0 admin demo, screenshots and existing navigation inventory',
     verifiedVendorDeepLinks:5,assessment:'Source-backed capability inventory, not proof of end-to-end parity with all vendor pages',
     items,counts,service,asOf:new Date().toISOString()});
   }catch(e){next(e)}

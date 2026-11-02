@@ -11,6 +11,9 @@ const fail=(res,status,error)=>res.status(status).json({error});
 const types=['page','policy','template','frontend'];
 const migration=[
 "CREATE TABLE IF NOT EXISTS gameops_game_profiles(game_id uuid PRIMARY KEY REFERENCES gameops_games(id) ON DELETE CASCADE,demo_chance integer NOT NULL DEFAULT 50 CHECK(demo_chance BETWEEN 0 AND 100),invest_enabled boolean NOT NULL DEFAULT false,min_invest integer NOT NULL DEFAULT 1,max_invest integer NOT NULL DEFAULT 1000,trending boolean NOT NULL DEFAULT false,featured boolean NOT NULL DEFAULT false,instructions text NOT NULL DEFAULT '',image_bytes bytea,image_mime text,version integer NOT NULL DEFAULT 1,updated_at timestamptz NOT NULL DEFAULT now())",
+"ALTER TABLE gameops_game_profiles ADD COLUMN IF NOT EXISTS winning_chance integer NOT NULL DEFAULT 50 CHECK(winning_chance BETWEEN 0 AND 100)",
+"ALTER TABLE gameops_game_profiles ADD COLUMN IF NOT EXISTS win_amount integer NOT NULL DEFAULT 50 CHECK(win_amount BETWEEN 0 AND 100)",
+"CREATE INDEX IF NOT EXISTS gameops_events_gameid_id_idx ON gameops_events(game_id,id DESC)",
 "CREATE TABLE IF NOT EXISTS gameops_player_profiles(player_id uuid PRIMARY KEY REFERENCES gameops_players(id) ON DELETE CASCADE,first_name text NOT NULL DEFAULT '',last_name text NOT NULL DEFAULT '',city text NOT NULL DEFAULT '',state text NOT NULL DEFAULT '',zip text NOT NULL DEFAULT '',country text NOT NULL DEFAULT '',admin_note text NOT NULL DEFAULT '',local_status text NOT NULL DEFAULT 'active' CHECK(local_status IN ('active','review','blocked_locally')),version integer NOT NULL DEFAULT 1,updated_at timestamptz NOT NULL DEFAULT now())",
 "CREATE TABLE IF NOT EXISTS gameops_ticket_messages(id bigserial PRIMARY KEY,ticket_id uuid NOT NULL REFERENCES gameops_tickets(id) ON DELETE CASCADE,author text NOT NULL,body text NOT NULL,created_at timestamptz NOT NULL DEFAULT now())",
 "CREATE TABLE IF NOT EXISTS gameops_subscribers(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact text NOT NULL UNIQUE,status text NOT NULL DEFAULT 'subscribed' CHECK(status IN ('subscribed','unsubscribed')),created_at timestamptz NOT NULL DEFAULT now())",
@@ -27,6 +30,35 @@ async function logLogin(pool,user,success,ip){
 }
 async function isRevoked(pool,nonce){return !!(await pool.query("SELECT 1 FROM gameops_revoked_sessions WHERE nonce=$1",[nonce])).rowCount}
 async function revoke(pool,session){await pool.query("INSERT INTO gameops_revoked_sessions(nonce,expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING",[session.n,new Date(session.e)])}
+
+const roundKinds=['all','win','loss','draw'];
+function parseRoundFilters(params={}){
+ const page=Number(params.page??1),limit=Number(params.limit??25),
+       result=typeof params.result==='string'?params.result:'all',
+       q=typeof params.q==='string'?params.q.trim():'';
+ if(!Number.isSafeInteger(page)||page<1||page>1000||
+    !Number.isSafeInteger(limit)||limit<1||limit>100||
+    !roundKinds.includes(result)||q.length>80||
+    (params.q!==undefined&&typeof params.q!=='string'))return null;
+ return {page,limit,result,q};
+}
+async function readRoundPage(pool,kind,reference,opts){
+ const from=' FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id LEFT JOIN gameops_players p ON p.game_id=e.game_id AND p.player_ref=e.player_ref ';
+ const filter=(kind==='game'?'e.game_id=$1':'p.id=$1')+
+ " AND ($2='' OR position(lower($2) in lower(e.round_id))>0 OR position(lower($2) in lower(e.player_ref))>0 OR position(lower($2) in lower(e.event_id))>0)"+
+ " AND ($3='all' OR ($3='win' AND e.payout>e.stake) OR ($3='loss' AND e.payout<e.stake) OR ($3='draw' AND e.payout=e.stake))";
+ const where=' WHERE '+filter;
+ const args=[reference,opts.q,opts.result];
+ const [count,rows]=await Promise.all([
+  pool.query('SELECT count(*)::int AS total'+from+where,args),
+  pool.query("SELECT e.id::text,e.event_id,e.round_id,e.player_ref,p.id::text AS player_id,g.name AS game,e.stake::text,e.payout::text,e.currency,e.occurred_at,CASE WHEN e.payout>e.stake THEN 'win' WHEN e.payout<e.stake THEN 'loss' ELSE 'draw' END AS result"+from+where+' ORDER BY e.id DESC LIMIT $4 OFFSET $5',[...args,opts.limit,(opts.page-1)*opts.limit])
+ ]);
+ const total=count.rows[0].total,pageCount=Math.ceil(total/opts.limit);
+ return {items:rows.rows,total,page:opts.page,limit:opts.limit,pages:pageCount,hasNext:opts.page<pageCount,
+  filters:{q:opts.q,result:opts.result},roundsReadOnly:true,externalSettlementVerified:false,
+  note:'Signed observed rounds only. Net result compares observed payout to stake; not vendor win_status.'};
+}
+
 function mount(app,{pool,audit}){
  app.get('/api/admin/deep/summary',wrap(async(req,res)=>{
   const [games,players,tickets,subs,content]=await Promise.all([
@@ -44,21 +76,21 @@ function mount(app,{pool,audit}){
  }));
  app.get('/api/admin/deep/games/:gid',wrap(async(req,res)=>{
   if(!id(req.params.gid))return fail(res,400,'Invalid ID');
-  const q=await pool.query("SELECT g.id,g.name,g.slug,g.code,g.platform,g.version AS build_version,g.status,g.rounds::text,coalesce(c.demo_chance,50) AS demo_chance,coalesce(c.invest_enabled,false) AS invest_enabled,coalesce(c.min_invest,1) AS min_invest,coalesce(c.max_invest,1000) AS max_invest,coalesce(c.trending,false) AS trending,coalesce(c.featured,false) AS featured,coalesce(c.instructions,'') AS instructions,coalesce(c.version,1) AS version,(c.image_bytes IS NOT NULL) AS has_image FROM gameops_games g LEFT JOIN gameops_game_profiles c ON c.game_id=g.id WHERE g.id=$1",[req.params.gid]);
+  const q=await pool.query("SELECT g.id,g.name,g.slug,g.code,g.platform,g.version AS build_version,g.status,g.rounds::text,coalesce(c.demo_chance,50) AS demo_chance,coalesce(c.winning_chance,50) AS winning_chance,coalesce(c.win_amount,50) AS win_amount,coalesce(c.invest_enabled,false) AS invest_enabled,coalesce(c.min_invest,1) AS min_invest,coalesce(c.max_invest,1000) AS max_invest,coalesce(c.trending,false) AS trending,coalesce(c.featured,false) AS featured,coalesce(c.instructions,'') AS instructions,coalesce(c.version,1) AS version,(c.image_bytes IS NOT NULL) AS has_image FROM gameops_games g LEFT JOIN gameops_game_profiles c ON c.game_id=g.id WHERE g.id=$1",[req.params.gid]);
   if(!q.rowCount)return fail(res,404,'Game not found');
   res.json({item:q.rows[0],note:'Simulation settings are demo-only; never modify live outcomes'});
  }));
  app.put('/api/admin/deep/games/:gid',wrap(async(req,res)=>{
   if(!id(req.params.gid))return fail(res,400,'Invalid ID');
   const p=req.body||{};
-  if(!clean(p.name,100)||!p.name.trim()||!clean(p.code,12)||!clean(p.platform,80)||!percent(p.demo_chance)||typeof p.invest_enabled!=='boolean'||typeof p.trending!=='boolean'||typeof p.featured!=='boolean'||!num(p.min_invest)||!num(p.max_invest)||p.min_invest>p.max_invest||!clean(p.instructions,15000)||!Number.isInteger(p.version)||p.version<1)return fail(res,400,'Invalid game configuration');
+  if(!clean(p.name,100)||!p.name.trim()||!clean(p.code,12)||!clean(p.platform,80)||!percent(p.demo_chance)||!percent(p.winning_chance)||!percent(p.win_amount)||typeof p.invest_enabled!=='boolean'||typeof p.trending!=='boolean'||typeof p.featured!=='boolean'||!num(p.min_invest)||!num(p.max_invest)||p.min_invest>p.max_invest||!clean(p.instructions,15000)||!Number.isInteger(p.version)||p.version<1)return fail(res,400,'Invalid game configuration');
   const client=await pool.connect();
   try{
    await client.query('BEGIN');
    const g=await client.query('SELECT id FROM gameops_games WHERE id=$1 FOR UPDATE',[req.params.gid]);
    if(!g.rowCount){await client.query('ROLLBACK');return fail(res,404,'Game not found')}
    await client.query('INSERT INTO gameops_game_profiles(game_id) VALUES($1) ON CONFLICT DO NOTHING',[req.params.gid]);
-   const q=await client.query("UPDATE gameops_game_profiles SET demo_chance=$2,invest_enabled=$3,min_invest=$4,max_invest=$5,trending=$6,featured=$7,instructions=$8,version=version+1,updated_at=now() WHERE game_id=$1 AND version=$9 RETURNING version",[req.params.gid,p.demo_chance,p.invest_enabled,p.min_invest,p.max_invest,p.trending,p.featured,p.instructions,p.version]);
+   const q=await client.query("UPDATE gameops_game_profiles SET demo_chance=$2,winning_chance=$3,win_amount=$4,invest_enabled=$5,min_invest=$6,max_invest=$7,trending=$8,featured=$9,instructions=$10,version=version+1,updated_at=now() WHERE game_id=$1 AND version=$11 RETURNING version",[req.params.gid,p.demo_chance,p.winning_chance,p.win_amount,p.invest_enabled,p.min_invest,p.max_invest,p.trending,p.featured,p.instructions,p.version]);
    if(!q.rowCount){await client.query('ROLLBACK');return fail(res,409,'Configuration changed elsewhere; reload')}
    await client.query("UPDATE gameops_games SET name=$2,code=$3,platform=$4,updated_at=now() WHERE id=$1",[req.params.gid,p.name.trim(),p.code,p.platform]);
    await client.query('COMMIT');
@@ -85,6 +117,15 @@ function mount(app,{pool,audit}){
   const q=await pool.query('SELECT image_bytes,image_mime FROM gameops_game_profiles WHERE game_id=$1',[req.params.gid]);
   if(!q.rowCount||!q.rows[0].image_bytes)return fail(res,404,'No image');
   res.type(q.rows[0].image_mime).send(q.rows[0].image_bytes);
+ }));
+
+ app.get('/api/admin/deep/games/:gid/rounds',wrap(async(req,res)=>{
+  if(!id(req.params.gid))return fail(res,400,'Invalid game ID');
+  const opts=parseRoundFilters(req.query);
+  if(!opts)return fail(res,400,'Invalid game log filters');
+  const exists=await pool.query('SELECT id FROM gameops_games WHERE id=$1',[req.params.gid]);
+  if(!exists.rowCount)return fail(res,404,'Game not found');
+  res.json(await readRoundPage(pool,'game',req.params.gid,opts));
  }));
  app.get('/api/admin/deep/players',wrap(async(req,res)=>{
   const state=String(req.query.state||'all');
@@ -116,9 +157,12 @@ function mount(app,{pool,audit}){
   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
  }));
  app.get('/api/admin/deep/players/:pid/rounds',wrap(async(req,res)=>{
-  if(!id(req.params.pid))return fail(res,400,'Invalid ID');
-  const q=await pool.query('SELECT e.id::text,e.event_id,e.round_id,e.stake::text,e.payout::text,e.currency,e.occurred_at,g.name AS game FROM gameops_players p JOIN gameops_events e ON e.game_id=p.game_id AND e.player_ref=p.player_ref JOIN gameops_games g ON g.id=e.game_id WHERE p.id=$1 ORDER BY e.id DESC LIMIT 200',[req.params.pid]);
-  res.json({items:q.rows});
+  if(!id(req.params.pid))return fail(res,400,'Invalid player ID');
+  const opts=parseRoundFilters(req.query);
+  if(!opts)return fail(res,400,'Invalid player log filters');
+  const exists=await pool.query('SELECT id FROM gameops_players WHERE id=$1',[req.params.pid]);
+  if(!exists.rowCount)return fail(res,404,'Player not found');
+  res.json(await readRoundPage(pool,'player',req.params.pid,opts));
  }));
  app.get('/api/admin/deep/rounds',wrap(async(req,res)=>{
  const q=await pool.query('SELECT e.id::text,e.event_id,e.round_id,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at,g.name AS game FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id ORDER BY e.id DESC LIMIT 200');
