@@ -1,6 +1,6 @@
 'use strict';
 const crypto=require('node:crypto');
-const id=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(x);
+const id=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x);
 const clean=(x,n=200)=>typeof x==='string'&&x.length<=n;
 const num=x=>Number.isSafeInteger(x)&&x>=0&&x<=1000000000;
 const percent=x=>Number.isInteger(x)&&x>=0&&x<=100;

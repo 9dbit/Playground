@@ -8,6 +8,7 @@ Scope: connected-user screenshot evidence for Xaxino game/edit/19, users/detail/
 2. Game Editor's View Game Log navigates to #/game-rounds/:gid, which requested GET /api/admin/deep/games/:gid/rounds, but no route existed. The UI therefore showed Load failed.
 3. User Detail Logins and Notifications buttons linked to unrelated admin-wide reports, not specific player histories. No verified game-player login or notification provider exists.
 4. Game Log and player rounds endpoints used hardcoded LIMIT 200, without scoped pagination or query filtering.
+5. CRITICAL: engine/deep-routes.js used a malformed UUID regex omitting the 4-character variant segment. Valid UUIDs returned HTTP 400 across game detail, player detail and several deep routes. Corrected to canonical 8-4-4-4-12 with version/variant checks, backed by real integration tests.
 
 ## Implementation
 - Add idempotent PostgreSQL migration for winning_chance and win_amount, NOT NULL default 50 with per-field CHECK 0..100. These values are strictly demo metadata and NOT connected to live engines, game outcomes, or settlement.

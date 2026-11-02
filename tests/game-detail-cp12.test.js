@@ -58,7 +58,6 @@ test('Checkpoint 12: legacy schema migration, edit persistence and scoped observ
  }
  await db.query("INSERT INTO gameops_events(event_id,round_id,game_id,player_ref,stake,payout) VALUES('private-other','other-001',$1,'qa-external',100,500)",[other]);
  const app=express();app.use(express.json());
- app.get('/api/admin/deep/games/:gid',(req,res,next)=>{console.log('CP12_DEBUG_UUID',JSON.stringify({value:req.params.gid,length:req.params.gid.length,valid:/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(req.params.gid)}));next();});
  deep.mount(app,{pool:db,audit:async(action,resource,details={})=>{
   await db.query("INSERT INTO gameops_audit(actor,action,resource,details) VALUES('qa_owner',$1,$2,$3)",[action,resource,JSON.stringify(details)]);
  }});
