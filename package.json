@@ -1,13 +1,13 @@
 {
   "name": "playground-gameops",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check engine/deep-routes.js && node --check engine/security.js && node --check engine/security-crypto.js && node --check engine/security-policy.js && node --check public/control.js && node --check public/engine.js && node --check public/login.js && node --check public/security-ui.js && node --check public/security-nav.js && node --check engine/virtual-wallet.js && node --check engine/parity.js && node --check engine/game-bridge.js && node --check public/bridge-ui.js && node --check public/bridge-nav.js && node --check adapters/gameops-heartbeat.cjs",
+    "check": "node --check server.js && node --check engine/deep-routes.js && node --check engine/security.js && node --check engine/security-crypto.js && node --check engine/security-policy.js && node --check public/control.js && node --check public/engine.js && node --check public/login.js && node --check public/security-ui.js && node --check public/security-nav.js && node --check engine/virtual-wallet.js && node --check engine/parity.js && node --check engine/admin-operations.js && node --check engine/game-bridge.js && node --check public/bridge-ui.js && node --check public/bridge-nav.js && node --check adapters/gameops-heartbeat.cjs",
     "test": "npm run check && node --test tests/*.test.js"
   },
   "dependencies": {

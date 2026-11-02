@@ -1,0 +1,15 @@
+/* Checkpoint 11: interactive admin dashboard utilities. */
+.notif-count{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;border-radius:100px;background:#ff694f;color:#fff;font-size:10px;font-weight:800;padding:1px 5px;margin-left:5px}
+.notif-count[hidden]{display:none}
+.top-actions .icon-btn{white-space:nowrap}
+.global-search .toolbar{margin-bottom:10px}
+.global-search .result{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:13px 14px;text-align:left;background:#fff;border:0;border-bottom:1px solid #e6eaf3;border-radius:0;color:#263a57}
+.global-search .result strong{font-size:13px;font-weight:700}
+.global-search .result small{font-size:11px;color:#7a859a}
+.global-search .result:hover,.global-search .result:focus{background:#f0edff;outline:2px solid #6753fa;outline-offset:-2px}
+.global-search .empty-search{padding:18px;color:#7a859a;font-size:12px}
+#profile-save .form-actions{display:flex;flex-wrap:wrap;align-items:center}
+#profile-save .form-actions .btn.ghost{text-decoration:none;display:inline-block}
+#profile-save .status-line{gap:14px}
+#profile-save input[name=displayName]{max-width:600px}
+@media(max-width:700px){.topbar .top-actions{gap:4px}.top-actions .icon-btn{padding:7px 8px;font-size:11px}.notif-count{min-width:16px;height:16px;font-size:9px}.global-search{width:100%}}

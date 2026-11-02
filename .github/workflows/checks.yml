@@ -45,6 +45,7 @@ jobs:
       - run: node tests/security-ui.cjs
       - run: node tests/bridge-ui.cjs
       - run: node tests/parity-ui.cjs
+      - run: node tests/admin-operations-ui.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
