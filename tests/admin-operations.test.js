@@ -36,7 +36,7 @@ test('live Dashboard operations with isolated PostgreSQL persistence',{skip:!pro
   await admin.end();
  });
  const ddl=[
-  "CREATE TABLE gameops_admin_accounts(id uuid PRIMARY KEY,username text,display_name text,role text,status text,mfa_enabled boolean)",
+  "CREATE TABLE gameops_admin_accounts(id uuid PRIMARY KEY,username text,display_name text,role text,status text,mfa_enabled boolean,updated_at timestamptz DEFAULT now())",
   "CREATE TABLE gameops_audit(id bigserial PRIMARY KEY,actor text,action text,resource text,details jsonb DEFAULT '{}'::jsonb,created_at timestamptz DEFAULT now())",
   "CREATE TABLE gameops_settings(key text PRIMARY KEY,value jsonb NOT NULL,updated_at timestamptz NOT NULL DEFAULT now())",
   "CREATE TABLE gameops_revoked_sessions(nonce text PRIMARY KEY,expires_at timestamptz NOT NULL)",

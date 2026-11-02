@@ -59,12 +59,13 @@ const flags={general:'Partial runtime styling',logo:'Stored only',configuration:
 let token='',route='',renderSequence=0,expanded=new Set(['Manage Games','Manage Users']),mobile=false,settingCache=null,searchTerm='';
 let queuedImage=null;
 const gameLogQueries=Object.create(null);
+const playerQueries=Object.create(null);
 function go(r){const next='#/'+r;if(location.hash===next){render()}else location.hash=next;mobile=false}
 function getRoute(){return decodeURIComponent((location.hash||'#/dashboard').replace(/^#\/?/,''))||'dashboard'}
 function nav(){return '<aside class="sidebar '+(mobile?'mobile-open':'')+'"><div class="brand">◈ PLAY<span>GROUND</span><small>CONTROL</small></div>'+
  sidebar.map(([title,target,children])=>'<div class="nav-group"><button class="nav-root '+(route===target?'active':'')+'" data-root="'+E(title)+'" '+(children.length?'':'data-go="'+E(target)+'"')+'><span>◈</span>'+E(title)+(children.length?'<span class="arrow">'+(expanded.has(title)?'⌃':'⌄')+'</span>':'')+'</button>'+
  (children.length&&expanded.has(title)?'<div class="nav-children">'+children.map(([r,label])=>'<button class="nav-child '+(route===r?'active':'')+'" data-go="'+E(r)+'">'+E(label)+'</button>').join('')+'</div>':'')+'</div>').join('')+
- '<div class="nav-footer">Playground · Engine v0.7<br>Source: Checkpoint 06 audit</div></aside>'}
+ '<div class="nav-footer">Playground · Engine v0.14<br>CP13 remediation</div></aside>'}
 function shell(content){return '<div class="layout">'+nav()+'<section class="content-wrap"><header class="topbar"><div class="top-left"><button class="icon-btn navmobile" data-action="mobile">☰</button><button class="search" data-action="search">⌕ Search menus <kbd>Ctrl + K</kbd></button></div><div class="top-actions"><button class="icon-btn desktop" data-go="activity" title="Notification Center">♧ <span class="notif-count" id="notif-count" hidden></span></button><button class="icon-btn desktop" data-go="extra/server" title="System information">⚙</button><button class="icon-btn" data-action="refresh">⟳</button><button class="icon-btn" data-go="profile" title="Administrator profile">admin ▾</button><button class="icon-btn" data-action="logout" title="Sign out">⏻</button></div></header><main class="main">'+content+'<footer class="footer">Playground Control Center · Data backed by PostgreSQL unless marked otherwise · No external game control or wallet settlement</footer></main></section></div>'}
 function heading(title,subtitle='',back='',extra=''){return '<div class="head"><div><div class="crumb">PLAYGROUND / '+E(route.replaceAll('/',' / '))+'</div><h1>'+E(title)+'</h1><p>'+E(subtitle)+'</p></div><div class="actions">'+(back?'<button class="btn ghost" data-go="'+E(back)+'">← Back</button>':'')+extra+'</div></div>'}
 function notice(s,kind=''){return '<div class="notice '+kind+'">'+E(s)+'</div>'}
@@ -82,7 +83,7 @@ function formFields(f){return '<div class="field-grid">'+f.map(x=>field(...x)).j
 function formValues(form){const values=Object.fromEntries(new FormData(form));form.querySelectorAll('[type=checkbox]').forEach(x=>values[x.name]=x.checked);form.querySelectorAll('[type=number]').forEach(x=>values[x.name]=Number(values[x.name]||0));if('version' in values)values.version=Number.parseInt(values.version,10);return values}
 async function api(path,method='GET',body){const headers={'Accept':'application/json','X-CSRF-Token':token};const opts={method,credentials:'same-origin',headers};if(body!==undefined){headers['Content-Type']='application/json';opts.body=JSON.stringify(body)}
  const r=await fetch(path,opts);if(r.status===401){location.replace('/login');throw Error('Login required')}
- const data=await r.json().catch(()=>({error:'Invalid server response'}));if(!r.ok)throw Error(data.error||'Request failed');return data}
+ const data=await r.json().catch(()=>({error:'Invalid server response'}));if(!r.ok){const error=new Error(data.error||'Request failed');error.status=r.status;error.code=data.code;error.fields=data.details?.fields||[];throw error}return data}
 function toast(message){document.querySelector('.toast')?.remove();const x=document.createElement('div');x.className='toast';x.textContent=message;document.body.appendChild(x);setTimeout(()=>x.remove(),4200)}
 async function dashboard(){const [d,s,g]=await Promise.all([api(apiBase+'deep/summary'),api(apiBase+'summary'),api(apiBase+'deep/games')]);
  const v=[metric('Games',d.games.total,'◈','games'),metric('Active Catalog Entries',d.games.active,'◉','games'),metric('Observed Players',d.players.total,'♙','players/all'),metric('Observed Rounds',s.rounds,'▧','rounds'),metric('Total Played · Demo Coin',n(s.stake),'◈','report/transactions'),metric('Observed Payout · Demo Coin',n(s.payout),'◇','report/transactions/win'),metric('Support Tickets',d.tickets.total,'▤','tickets/all'),metric('Subscribers',d.subscribers,'♧','subscribers')];
@@ -146,11 +147,18 @@ async function round(id){const d=await api(apiBase+'deep/rounds/'+id);const x=d.
  return heading('Round '+x.round_id,'Immutable settled round detail','rounds')+notice('Evidence only. Editing, re-settlement and reversal are not supported.')+
  table(['Field','Value'],Object.entries(x).map(([k,v])=>[E(k),E(v)]));
 }
-async function players(state){if(['email','mobile','kyc','kyc-pending'].includes(state))return heading('Manage Users · '+state,'Verification provider is not integrated yet','players/all')+notice('No identity verification dataset exists; this view cannot claim verified/unverified accounts.', 'warn')+table(['Status'],[]);
- const q=await api(apiBase+'deep/players?state='+encodeURIComponent(state||'all'));
- return heading('Manage Users · '+(state||'all'),'Pseudonymous players from signed game events')+
- notice('User Details do not include email, phone or identification records. Local status has no enforcement at the external game engine.')+
- table(['Player','Game','Rounds','Local Status','Last Seen','Detail'],q.items.map(x=>[link(x.player_ref,'player/'+x.id),E(x.game),n(x.rounds),badge(x.local_status),fmt(x.last_seen),link('Details →','player/'+x.id)]));
+async function players(state,page=1){
+ if(['email','mobile','kyc','kyc-pending'].includes(state))return heading('Manage Users / '+state,'Verification provider is not integrated yet','players/all')+notice('No identity verification dataset exists; this view cannot claim verified/unverified accounts.', 'warn')+table(['Status'],[]);
+ const currentPage=/^[1-9][0-9]*$/.test(String(page))?Math.min(10000,Number(page)):1;
+ const query=playerQueries[state]||'';
+ const params=new URLSearchParams({state:state||'all',page:String(currentPage),limit:'25',q:query});
+ const q=await api(apiBase+'deep/players?'+params);
+ const meta={...q,page:q.page||1,total:q.total??q.items.length,pages:q.pages??1};
+ return heading('Manage Users / '+(state||'all'),'Status and search are filtered in the database before pagination')+
+ notice('Local status is not enforced by the external game engine. No identity verification is inferred.')+
+ '<form id="player-filter" class="toolbar" data-state="'+E(state||'all')+'"><input name="q" class="qsearch" maxlength="80" aria-label="Search players" placeholder="Player reference or name" value="'+E(query)+'"><button class="btn" type="submit">Search</button><button class="btn ghost" type="button" data-action="player-filter-clear" data-state="'+E(state||'all')+'">Clear</button></form>'+
+ table(['Player','Game','Rounds','Local Status','Last Seen','Detail'],q.items.map(x=>[link(x.player_ref,'player/'+x.id),E(x.game),n(x.rounds),badge(x.local_status),fmt(x.last_seen),link('Details','player/'+x.id)]))+
+ pageControls(meta,next=>'players/'+(state||'all')+'/'+next);
 }
 async function player(id){const [d,w]=await Promise.all([api(apiBase+'deep/players/'+id),api(apiBase+'virtual-wallets/'+id)]),p=d.item;
  const fields=[['First Name','first_name','text',p.first_name],['Last Name','last_name','text',p.last_name],['City','city','text',p.city],['State','state','text',p.state],['ZIP/Postal','zip','text',p.zip],['Country','country','text',p.country],['Local Status (not enforced in game)','local_status','select',p.local_status,'active|review|blocked_locally'],['Admin Note','admin_note','textarea',p.admin_note]];
@@ -208,13 +216,15 @@ async function setting(key){const schema=settingFields[key];
  const fields=schema.map(([name,k,type,def,opts])=>[name,k,type,v[k]??def,opts]);
  return heading(settingItems.find(x=>x[0]===key)?.[1]||key,'Saved in PostgreSQL and audited · '+(flags[key]||'Stored only'),'settings')+
  notice((key==='robots'?'This is published at /robots.txt. ':key==='maintenance'?'Maintenance applies to published information pages only. ':key==='general'?'Title and brand color apply to this admin UI after refresh. ':'This setting is stored for later provider integration; saving does not activate unavailable services. ')+(flags[key]||''),key==='general'?'':'warn')+
- '<form id="setting-save" class="panel" data-key="'+E(key)+'"><h2>Configuration</h2>'+formFields(fields)+
- '<div class="form-actions"><button class="btn">Save '+E(key)+'</button></div></form>';
+ (record?.validation?.valid===false?notice('Stored legacy values need correction. They remain unchanged until Save; each accepted revision is archived.','warn'):'')+
+ '<form id="setting-save" class="panel" data-key="'+E(key)+'" data-version="'+E(record?.version||0)+'"><h2>Configuration</h2><p class="small">Loaded revision: '+E(record?.version||0)+'</p><div id="settings-errors" class="notice warn" role="alert" hidden></div>'+formFields(fields)+
+ '<div class="form-actions"><button class="link" type="button" data-action="settings-reload" hidden>Reload latest (discard these edits)</button><button class="btn" type="submit">Save '+E(key)+'</button></div></form>';
 }
 async function content(kind){const q=await api(apiBase+'deep/content/'+kind);
  return heading(kind.charAt(0).toUpperCase()+kind.slice(1)+' Management','Create, edit, version and publish content in PostgreSQL','settings','<button class="btn" data-go="content-edit/'+kind+'/new">+ Create</button>')+
- notice('Published page/policy content is available at /info/{slug}. Template and Frontend records are drafts until integrated with their consumers.')+
- table(['Title','Slug','Status','Version','Modified','Action'],q.items.map(x=>[link(x.title,'content-edit/'+kind+'/'+x.id),E(x.slug),badge(x.status),n(x.version),fmt(x.updated_at),link('Edit →','content-edit/'+kind+'/'+x.id)]));
+ notice('Published pages use /info/page/{slug}; policies use /info/policy/{slug}. Templates and Frontend records are drafts until integrated.')+
+ (q.legacyAmbiguities?notice('Some old addresses have more than one document. Existing content was preserved; use the canonical links below.','warn'):'')+
+ table(['Title','Slug','Status','Version','Public URL','Modified','Action'],q.items.map(x=>[link(x.title,'content-edit/'+kind+'/'+x.id),E(x.slug),badge(x.status),n(x.version),x.public_path&&x.status==='published'?'<a href="'+E(x.public_path)+'" target="_blank" rel="noopener">'+E(x.public_path)+'</a>':'Not published',fmt(x.updated_at),link('Edit','content-edit/'+kind+'/'+x.id)]));
 }
 async function contentEdit(kind,cid){const isNew=cid==='new',p=isNew?{title:'',slug:'',body:'',status:'draft',version:1}:(await api(apiBase+'deep/content/'+kind+'/'+cid)).item;
  return heading((isNew?'Create ':'Edit ')+kind,'Versioned content editor · safe plain-text publishing','content/'+kind)+
@@ -347,7 +357,7 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  if(a==='game-rounds')return gameRounds(b,c,parts[3]);
  if(a==='rounds')return roundList();
  if(a==='round')return round(b);
- if(a==='players')return players(b||'all');
+ if(a==='players')return players(b||'all',c);
  if(a==='player')return player(b);
  if(a==='player-rounds')return roundList(b,c);
  if(a==='diamonds')return diamonds(b||'all');
@@ -418,6 +428,8 @@ document.addEventListener('click',async e=>{
   if(a==='mobile'){mobile=!mobile;return render()}
   if(a==='close'){document.querySelector('.modal-screen')?.remove();return}
   if(a==='refresh')return render();
+  if(a==='settings-reload'){if(confirm('Discard unsaved settings and reload the latest revision?'))return render();return}
+  if(a==='player-filter-clear'){delete playerQueries[btn.dataset.state];go('players/'+btn.dataset.state+'/1');return}
   if(a==='game-log-clear'){delete gameLogQueries[btn.dataset.game];go(gameLogRoute(btn.dataset.game,btn.dataset.filter||'all',1));return}
   if(a==='activity-read'){await api(apiBase+'ops/notifications/'+btn.dataset.id+'/read','POST',{});toast('Notification marked as read');return render()}
   if(a==='activity-read-all'){await api(apiBase+'ops/notifications/read-all','POST',{});toast('All visible activity marked as read');return render()}
@@ -439,16 +451,23 @@ document.addEventListener('click',async e=>{
  }catch(err){toast('Error: '+err.message)}
 });
 document.addEventListener('submit',async e=>{
- const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form','profile-save','game-log-filter'].includes(form.id))return;
+ const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form','profile-save','game-log-filter','player-filter'].includes(form.id))return;
  e.preventDefault();
  try{
   const v=formValues(form);
+  if(form.id==='player-filter'){const state=form.dataset.state;playerQueries[state]=String(v.q||'').trim();go('players/'+state+'/1');return}
   if(form.id==='game-log-filter'){const id=form.dataset.game,q=String(v.q||'').trim();if(q.length>80)throw Error('Search too long');gameLogQueries[id]=q;go(gameLogRoute(id,form.dataset.result||'all',1));return}
   if(form.id==='profile-save'){await api(apiBase+'ops/profile','PUT',{displayName:String(v.displayName||'')});toast('Profile updated and audited');return render()}
   if(form.id==='game-edit'){const id=form.dataset.id;const r=await api(apiBase+'deep/games/'+id,'PUT',v);if(queuedImage){await api(apiBase+'deep/games/'+id+'/image','POST',{data:await toImage(queuedImage)});queuedImage=null}toast('Version '+r.version+' saved · live engine unchanged');return render()}
   if(form.id==='player-edit'){const r=await api(apiBase+'deep/players/'+form.dataset.id,'PUT',v);toast('Profile metadata saved · version '+r.version);return render()}
   if(form.id==='ticket-reply'){await api(apiBase+'deep/tickets/'+form.dataset.id+'/replies','POST',v);toast('Reply recorded internally');return render()}
-  if(form.id==='setting-save'){await api(apiBase+'settings/'+form.dataset.key,'PUT',{value:v});toast('Settings saved');if(form.dataset.key==='general')applyTheme(v);return render()}
+  if(form.id==='setting-save'){
+   for(const key of ['per_page','interval_minutes'])if(Object.hasOwn(v,key))v[key]=Number(v[key]);
+   form.querySelectorAll('[aria-invalid]').forEach(x=>x.removeAttribute('aria-invalid'));
+   const errors=form.querySelector('#settings-errors');errors.hidden=true;
+   await api(apiBase+'settings/'+form.dataset.key,'PUT',{value:v,expected_version:Number(form.dataset.version)});
+   toast('Settings saved and audited');if(form.dataset.key==='general')applyTheme(v);return render()
+  }
   if(form.id==='notification-create'){await api(apiBase+'deep/notifications','POST',v);toast('Recorded internally · not delivered');return render()}
   if(form.id==='content-edit'){const kind=form.dataset.kind,id=form.dataset.id;const uri=apiBase+'deep/content/'+kind+(id==='new'?'':'/'+id);await api(uri,id==='new'?'POST':'PUT',v);toast('Content saved');go('content/'+kind);return}
   if(form.id==='modal-form'){const kind=form.dataset.kind;
@@ -462,7 +481,16 @@ document.addEventListener('submit',async e=>{
    if(kind==='ticket')await api(apiBase+'tickets','POST',v);
    if(kind==='subscriber')await api(apiBase+'deep/subscribers','POST',v);
    document.querySelector('.modal-screen')?.remove();toast('Record added');return render()}
- }catch(err){toast('Save error: '+err.message)}
+ }catch(err){
+  if(form.id==='setting-save'){
+   const output=form.querySelector('#settings-errors');
+   output.hidden=false;output.textContent=err.message+(err.fields?.length?' '+err.fields.map(x=>x.field+': '+x.message).join('; '):'');
+   for(const field of err.fields||[]){const control=form.elements.namedItem(field.field);if(control?.setAttribute)control.setAttribute('aria-invalid','true')}
+   const reload=form.querySelector('[data-action=settings-reload]');reload.hidden=![409,428].includes(err.status);
+   output.scrollIntoView({block:'nearest'});
+  }
+  toast('Save error: '+err.message)
+ }
 });
 document.addEventListener('change',e=>{if(e.target.id==='game-image'){queuedImage=e.target.files[0]||null;if(queuedImage){const p=$('.image-preview');if(p){p.innerHTML='';const img=document.createElement('img');img.src=URL.createObjectURL(queuedImage);p.appendChild(img)}}}});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();search()}if(e.key==='Escape')document.querySelector('.modal-screen')?.remove()});

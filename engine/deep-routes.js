@@ -1,5 +1,8 @@
 'use strict';
-const crypto=require('node:crypto');
+const { HttpError, withTransaction } = require('./database-unit');
+const { normalizeArtwork } = require('./artwork');
+const { readPlayers } = require('./player-directory');
+const publicContent = require('./public-content');
 const id=x=>typeof x==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x);
 const clean=(x,n=200)=>typeof x==='string'&&x.length<=n;
 const num=x=>Number.isSafeInteger(x)&&x>=0&&x<=1000000000;
@@ -22,7 +25,10 @@ const migration=[
 "CREATE TABLE IF NOT EXISTS gameops_login_history(id bigserial PRIMARY KEY,username text NOT NULL,success boolean NOT NULL,ip text NOT NULL DEFAULT '',created_at timestamptz NOT NULL DEFAULT now())",
 "CREATE TABLE IF NOT EXISTS gameops_revoked_sessions(nonce text PRIMARY KEY,expires_at timestamptz NOT NULL,revoked_at timestamptz NOT NULL DEFAULT now())",
 "CREATE INDEX IF NOT EXISTS gameops_content_status_idx ON gameops_content(kind,status)",
-"CREATE INDEX IF NOT EXISTS gameops_login_time_idx ON gameops_login_history(created_at DESC)"
+"CREATE INDEX IF NOT EXISTS gameops_login_time_idx ON gameops_login_history(created_at DESC)",
+"CREATE INDEX IF NOT EXISTS gameops_player_status_idx ON gameops_player_profiles(local_status,player_id)",
+"CREATE INDEX IF NOT EXISTS gameops_players_stable_page_idx ON gameops_players(last_seen DESC,id DESC)",
+"CREATE INDEX IF NOT EXISTS gameops_ticket_messages_ticket_idx ON gameops_ticket_messages(ticket_id,id)"
 ];
 async function ensureSchema(pool){for(const sql of migration)await pool.query(sql)}
 async function logLogin(pool,user,success,ip){
@@ -59,7 +65,7 @@ async function readRoundPage(pool,kind,reference,opts){
   note:'Signed observed rounds only. Net result compares observed payout to stake; not vendor win_status.'};
 }
 
-function mount(app,{pool,audit}){
+function mount(app,{pool,audit,publicOrigin}){
  app.get('/api/admin/deep/summary',wrap(async(req,res)=>{
   const [games,players,tickets,subs,content]=await Promise.all([
    pool.query("SELECT count(*)::int AS total,count(*) FILTER(WHERE status='Active')::int AS active FROM gameops_games"),
@@ -93,24 +99,23 @@ function mount(app,{pool,audit}){
    const q=await client.query("UPDATE gameops_game_profiles SET demo_chance=$2,winning_chance=$3,win_amount=$4,invest_enabled=$5,min_invest=$6,max_invest=$7,trending=$8,featured=$9,instructions=$10,version=version+1,updated_at=now() WHERE game_id=$1 AND version=$11 RETURNING version",[req.params.gid,p.demo_chance,p.winning_chance,p.win_amount,p.invest_enabled,p.min_invest,p.max_invest,p.trending,p.featured,p.instructions,p.version]);
    if(!q.rowCount){await client.query('ROLLBACK');return fail(res,409,'Configuration changed elsewhere; reload')}
    await client.query("UPDATE gameops_games SET name=$2,code=$3,platform=$4,updated_at=now() WHERE id=$1",[req.params.gid,p.name.trim(),p.code,p.platform]);
+   await audit('game.config.updated',req.params.gid,{version:q.rows[0].version,demoOnly:true},client);
    await client.query('COMMIT');
-   await audit('game.config.updated',req.params.gid,{version:q.rows[0].version,demoOnly:true});
    res.json({ok:true,version:q.rows[0].version,externalEngineAffected:false});
   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
  }));
  app.post('/api/admin/deep/games/:gid/image',wrap(async(req,res)=>{
   if(!id(req.params.gid))return fail(res,400,'Invalid ID');
-  const raw=req.body?.data;
-  if(typeof raw!=='string'||raw.length>720000)return fail(res,400,'Image too large (maximum 500 KB)');
-  const m=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw);
-  if(!m)return fail(res,400,'PNG, JPG or WebP required');
-  const b=Buffer.from(m[2],'base64');
-  const valid=(m[1]==='image/png'&&b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))||(m[1]==='image/jpeg'&&b[0]===255&&b[1]===216)||(m[1]==='image/webp'&&b.toString('ascii',0,4)==='RIFF'&&b.toString('ascii',8,12)==='WEBP');
-  if(!valid||b.length>500000)return fail(res,400,'Invalid image bytes');
-  const q=await pool.query('UPDATE gameops_game_profiles SET image_bytes=$2,image_mime=$3,updated_at=now() WHERE game_id=$1 RETURNING game_id',[req.params.gid,b,m[1]]);
-  if(!q.rowCount)return fail(res,409,'Save game configuration before uploading image');
-  await audit('game.image.updated',req.params.gid,{mime:m[1],size:b.length});
-  res.json({ok:true});
+  let image;
+  try { image=await normalizeArtwork(req.body?.data); }
+  catch(e) { if(e instanceof HttpError)return fail(res,e.status,e.message);throw e; }
+  const saved=await withTransaction(pool,async db=>{
+   const q=await db.query('UPDATE gameops_game_profiles SET image_bytes=$2,image_mime=$3,version=version+1,updated_at=now() WHERE game_id=$1 RETURNING version',[req.params.gid,image.bytes,image.mime]);
+   if(!q.rowCount)throw new HttpError(409,'Save game configuration before uploading artwork');
+   await audit('game.image.updated',req.params.gid,{mime:image.mime,size:image.bytes.length,width:image.width,height:image.height,version:q.rows[0].version},db);
+   return q.rows[0];
+  });
+  res.json({ok:true,version:saved.version,artwork:{mime:image.mime,bytes:image.bytes.length,width:image.width,height:image.height,normalized:true}});
  }));
  app.get('/api/admin/deep/games/:gid/image',wrap(async(req,res)=>{
   if(!id(req.params.gid))return fail(res,400,'Invalid ID');
@@ -128,10 +133,7 @@ function mount(app,{pool,audit}){
   res.json(await readRoundPage(pool,'game',req.params.gid,opts));
  }));
  app.get('/api/admin/deep/players',wrap(async(req,res)=>{
-  const state=String(req.query.state||'all');
-  const q=await pool.query("SELECT p.id,p.player_ref,p.game_id,g.name AS game,p.rounds::text,p.last_seen,coalesce(m.first_name,'') AS first_name,coalesce(m.last_name,'') AS last_name,coalesce(m.local_status,'active') AS local_status FROM gameops_players p JOIN gameops_games g ON g.id=p.game_id LEFT JOIN gameops_player_profiles m ON m.player_id=p.id ORDER BY p.last_seen DESC LIMIT 200");
-  const items=q.rows.filter(x=>state==='all'||(state==='active'&&x.local_status==='active')||(state==='banned'&&x.local_status==='blocked_locally')||(state==='review'&&x.local_status==='review'));
-  res.json({items,note:'Pseudonymous players from signed events; local block not enforced in external game'});
+  res.json(await readPlayers(pool,req.query));
  }));
  app.get('/api/admin/deep/players/:pid',wrap(async(req,res)=>{
   if(!id(req.params.pid))return fail(res,400,'Invalid ID');
@@ -151,8 +153,8 @@ function mount(app,{pool,audit}){
    await client.query('INSERT INTO gameops_player_profiles(player_id) VALUES($1) ON CONFLICT DO NOTHING',[req.params.pid]);
    const q=await client.query('UPDATE gameops_player_profiles SET first_name=$2,last_name=$3,city=$4,state=$5,zip=$6,country=$7,admin_note=$8,local_status=$9,version=version+1,updated_at=now() WHERE player_id=$1 AND version=$10 RETURNING version',[req.params.pid,p.first_name,p.last_name,p.city,p.state,p.zip,p.country,p.admin_note,p.local_status,p.version]);
    if(!q.rowCount){await client.query('ROLLBACK');return fail(res,409,'Profile changed elsewhere; reload')}
+   await audit('player.metadata.updated',req.params.pid,{version:q.rows[0].version,status:p.local_status},client);
    await client.query('COMMIT');
-   await audit('player.metadata.updated',req.params.pid,{version:q.rows[0].version,status:p.local_status});
    res.json({ok:true,version:q.rows[0].version,externalGameAffected:false});
   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
  }));
@@ -182,10 +184,14 @@ function mount(app,{pool,audit}){
  }));
  app.post('/api/admin/deep/tickets/:tid/replies',wrap(async(req,res)=>{
   if(!id(req.params.tid)||!clean(req.body?.body,4000)||!req.body.body.trim())return fail(res,400,'Invalid ticket reply');
-  const q=await pool.query("INSERT INTO gameops_ticket_messages(ticket_id,author,body) SELECT id,'admin',$2 FROM gameops_tickets WHERE id=$1 RETURNING id::text",[req.params.tid,req.body.body.trim()]);
-  if(!q.rowCount)return fail(res,404,'Ticket not found');
-  await audit('ticket.reply.recorded',req.params.tid,{messageId:q.rows[0].id});
-  res.status(201).json({item:q.rows[0],sentExternally:false});
+  const author=req.auth?.username;
+  if(typeof author!=='string'||!author)return fail(res,401,'Authenticated administrator required');
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('INSERT INTO gameops_ticket_messages(ticket_id,author,body) SELECT id,$2,$3 FROM gameops_tickets WHERE id=$1 RETURNING id::text,author,body,created_at',[req.params.tid,author,req.body.body.trim()]);
+   if(!q.rowCount)throw new HttpError(404,'Ticket not found');
+   await audit('ticket.reply.recorded',req.params.tid,{messageId:q.rows[0].id},db);return q.rows[0];
+  });
+  res.status(201).json({item,sentExternally:false});
  }));
  app.get('/api/admin/deep/requests/:rid',wrap(async(req,res)=>{
   if(!id(req.params.rid))return fail(res,400,'Invalid ID');
@@ -208,9 +214,11 @@ function mount(app,{pool,audit}){
  app.post('/api/admin/deep/notifications',wrap(async(req,res)=>{
   const p=req.body||{};
   if(!clean(p.recipient_ref,120)||!p.recipient_ref.trim()||!clean(p.title,180)||!p.title.trim()||!clean(p.body,2000)||!p.body.trim())return fail(res,400,'Invalid notification');
-  const q=await pool.query("INSERT INTO gameops_notifications(recipient_ref,title,body) VALUES($1,$2,$3) RETURNING id::text",[p.recipient_ref.trim(),p.title.trim(),p.body.trim()]);
-  await audit('notification.recorded',q.rows[0].id,{});
-  res.status(201).json({item:q.rows[0],sent:false});
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('INSERT INTO gameops_notifications(recipient_ref,title,body) VALUES($1,$2,$3) RETURNING id::text',[p.recipient_ref.trim(),p.title.trim(),p.body.trim()]);
+   await audit('notification.recorded',q.rows[0].id,{},db);return q.rows[0];
+  });
+  res.status(201).json({item,sent:false});
  }));
  app.get('/api/admin/deep/subscribers',wrap(async(req,res)=>{
   const q=await pool.query('SELECT id,contact,status,created_at FROM gameops_subscribers ORDER BY created_at DESC LIMIT 200');
@@ -219,66 +227,53 @@ function mount(app,{pool,audit}){
  app.post('/api/admin/deep/subscribers',wrap(async(req,res)=>{
   const email=req.body?.contact;
   if(typeof email!=='string'||!/^([^@\s]+)@([^@\s]+)\.([^@\s]+)$/.test(email)||email.length>200)return fail(res,400,'Valid email required');
-  const q=await pool.query('INSERT INTO gameops_subscribers(contact) VALUES($1) ON CONFLICT(contact) DO NOTHING RETURNING id',[email.toLowerCase()]);
-  if(!q.rowCount)return fail(res,409,'Subscriber exists');
-  await audit('subscriber.created',q.rows[0].id,{});
-  res.status(201).json({item:q.rows[0]});
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('INSERT INTO gameops_subscribers(contact) VALUES($1) ON CONFLICT(contact) DO NOTHING RETURNING id',[email.toLowerCase()]);
+   if(!q.rowCount)throw new HttpError(409,'Subscriber exists');
+   await audit('subscriber.created',q.rows[0].id,{},db);return q.rows[0];
+  });
+  res.status(201).json({item});
  }));
  app.patch('/api/admin/deep/subscribers/:sid',wrap(async(req,res)=>{
   if(!id(req.params.sid)||!['subscribed','unsubscribed'].includes(req.body?.status))return fail(res,400,'Invalid subscriber');
-  const q=await pool.query('UPDATE gameops_subscribers SET status=$2 WHERE id=$1 RETURNING id,status',[req.params.sid,req.body.status]);
-  if(!q.rowCount)return fail(res,404,'Subscriber not found');
-  await audit('subscriber.status.updated',req.params.sid,{status:req.body.status});
-  res.json({item:q.rows[0]});
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('UPDATE gameops_subscribers SET status=$2 WHERE id=$1 RETURNING id,status',[req.params.sid,req.body.status]);
+   if(!q.rowCount)throw new HttpError(404,'Subscriber not found');
+   await audit('subscriber.status.updated',req.params.sid,{status:req.body.status},db);return q.rows[0];
+  });
+  res.json({item});
  }));
  app.get('/api/admin/deep/content/:kind',wrap(async(req,res)=>{
   if(!types.includes(req.params.kind))return fail(res,404,'Content type unknown');
-  const q=await pool.query('SELECT id,kind,slug,title,status,version,updated_at FROM gameops_content WHERE kind=$1 ORDER BY updated_at DESC LIMIT 200',[req.params.kind]);
-  res.json({items:q.rows});
+  const q=await pool.query("SELECT c.id,c.kind,c.slug,c.title,c.status,c.version,c.updated_at,CASE WHEN c.kind IN ('page','policy') AND c.status='published' THEN EXISTS(SELECT 1 FROM gameops_content other WHERE other.slug=c.slug AND other.kind<>c.kind AND other.kind IN ('page','policy') AND other.status='published') ELSE false END AS legacy_url_ambiguous FROM gameops_content c WHERE c.kind=$1 ORDER BY c.updated_at DESC,c.id DESC LIMIT 200",[req.params.kind]);
+  res.json({items:q.rows.map(publicContent.attachContentLink),publicUrlStrategy:'namespaced-kind',legacyAmbiguities:q.rows.filter(x=>x.legacy_url_ambiguous).length});
  }));
  app.post('/api/admin/deep/content/:kind',wrap(async(req,res)=>{
   const p=req.body||{};
   if(!types.includes(req.params.kind)||!slug(p.slug)||!clean(p.title,180)||!p.title.trim()||!clean(p.body,20000)||!['draft','published'].includes(p.status))return fail(res,400,'Invalid content');
-  const q=await pool.query('INSERT INTO gameops_content(kind,slug,title,body,status) VALUES($1,$2,$3,$4,$5) ON CONFLICT(kind,slug) DO NOTHING RETURNING id',[req.params.kind,p.slug,p.title,p.body,p.status]);
-  if(!q.rowCount)return fail(res,409,'Slug already exists');
-  await audit('content.created',q.rows[0].id,{kind:req.params.kind});
-  res.status(201).json({item:q.rows[0]});
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('INSERT INTO gameops_content(kind,slug,title,body,status) VALUES($1,$2,$3,$4,$5) ON CONFLICT(kind,slug) DO NOTHING RETURNING id,kind,slug,version',[req.params.kind,p.slug,p.title,p.body,p.status]);
+   if(!q.rowCount)throw new HttpError(409,'Slug already exists in this content type');
+   await audit('content.created',q.rows[0].id,{kind:req.params.kind},db);return publicContent.attachContentLink(q.rows[0]);
+  });
+  res.status(201).json({item});
  }));
  app.get('/api/admin/deep/content/:kind/:cid',wrap(async(req,res)=>{
   if(!types.includes(req.params.kind)||!id(req.params.cid))return fail(res,400,'Invalid content');
   const q=await pool.query('SELECT * FROM gameops_content WHERE kind=$1 AND id=$2',[req.params.kind,req.params.cid]);
   if(!q.rowCount)return fail(res,404,'Content not found');
-  res.json({item:q.rows[0]});
+  res.json({item:publicContent.attachContentLink(q.rows[0])});
  }));
  app.put('/api/admin/deep/content/:kind/:cid',wrap(async(req,res)=>{
   const p=req.body||{};
-  if(!types.includes(req.params.kind)||!id(req.params.cid)||!slug(p.slug)||!clean(p.title,180)||!p.title.trim()||!clean(p.body,20000)||!['draft','published'].includes(p.status)||!Number.isInteger(p.version))return fail(res,400,'Invalid content');
-  const q=await pool.query('UPDATE gameops_content SET slug=$3,title=$4,body=$5,status=$6,version=version+1,updated_at=now() WHERE kind=$1 AND id=$2 AND version=$7 RETURNING id,version',[req.params.kind,req.params.cid,p.slug,p.title,p.body,p.status,p.version]);
-  if(!q.rowCount)return fail(res,409,'Content not found or version conflict');
-  await audit('content.updated',req.params.cid,{kind:req.params.kind,version:q.rows[0].version});
-  res.json({item:q.rows[0]});
+  if(!types.includes(req.params.kind)||!id(req.params.cid)||!slug(p.slug)||!clean(p.title,180)||!p.title.trim()||!clean(p.body,20000)||!['draft','published'].includes(p.status)||!Number.isSafeInteger(p.version)||p.version<1)return fail(res,400,'Invalid content');
+  const item=await withTransaction(pool,async db=>{
+   const q=await db.query('UPDATE gameops_content SET slug=$3,title=$4,body=$5,status=$6,version=version+1,updated_at=now() WHERE kind=$1 AND id=$2 AND version=$7 RETURNING id,kind,slug,version',[req.params.kind,req.params.cid,p.slug,p.title,p.body,p.status,p.version]);
+   if(!q.rowCount)throw new HttpError(409,'Content not found or version conflict');
+   await audit('content.updated',req.params.cid,{kind:req.params.kind,version:q.rows[0].version},db);return publicContent.attachContentLink(q.rows[0]);
+  });
+  res.json({item});
  }));
- app.get('/api/admin/deep/system/:name',wrap(async(req,res)=>{
-  if(!['server','application','cache','update','cron','security'].includes(req.params.name))return fail(res,404,'Unknown module');
-  res.json({name:req.params.name,readOnly:true,asOf:new Date().toISOString(),appVersion:'0.7.0',mfaEnabled:false,rbacEnabled:false,gameControlConnected:false,message:'Read-only status. Destructive maintenance is disabled.'});
- }));
- app.get('/robots.txt',wrap(async(req,res)=>{
-  const q=await pool.query("SELECT value FROM gameops_settings WHERE key='robots'");
-  const rules=q.rows[0]?.value?.rules;
-  res.type('text/plain').send(typeof rules==='string'&&rules.length<4000?rules:'User-agent: *\nDisallow: /engine\nDisallow: /api/\nDisallow: /login\n');
- }));
- app.get('/sitemap.xml',wrap(async(req,res)=>{
-  const q=await pool.query("SELECT slug FROM gameops_content WHERE status='published' AND kind IN ('page','policy') ORDER BY slug LIMIT 1000");
-  const base='https://playground-admin-production.up.railway.app';
-  const entries=q.rows.map(x=>'  <url><loc>'+escape(base+'/info/'+x.slug)+'</loc></url>').join('\n');
-  res.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+entries+'\n</urlset>');
- }));
- app.get('/info/:contentSlug',wrap(async(req,res)=>{
-  if(!slug(req.params.contentSlug))return res.status(404).send('Not found');
-  const [c,m]=await Promise.all([pool.query("SELECT title,body FROM gameops_content WHERE slug=$1 AND status='published' AND kind IN ('page','policy') LIMIT 1",[req.params.contentSlug]),pool.query("SELECT value FROM gameops_settings WHERE key='maintenance'")]);
-  if(m.rows[0]?.value?.enabled===true)return res.status(503).type('text/plain').send('Maintenance in progress');
-  if(!c.rowCount)return res.status(404).send('Not found');
-  res.type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(c.rows[0].title)+'</title><main style="font:16px system-ui;max-width:760px;margin:8vh auto;padding:25px;white-space:pre-wrap"><h1>'+escape(c.rows[0].title)+'</h1>'+escape(c.rows[0].body)+'</main>');
- }));
+ publicContent.mount(app,{pool,publicOrigin});
 }
 module.exports={ensureSchema,mount,logLogin,isRevoked,revoke};

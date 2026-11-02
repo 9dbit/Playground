@@ -9,20 +9,26 @@ const { createBridge } = require('./engine/game-bridge');
 const virtualWallet=require('./engine/virtual-wallet');
 const parity=require('./engine/parity');
 const adminOps=require('./engine/admin-operations');
+const { HttpError, withTransaction, writeAudit } = require('./engine/database-unit');
+const settingsSchema = require('./engine/settings-schema');
+const { validateSetting, saveSettings } = settingsSchema;
+const { readPlayers } = require('./engine/player-directory');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.12.0';
+const VERSION = '0.14.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
 if (SESSION_SECRET.length < 32) throw new Error('Signing secrets are too short');
 const pool = new Pool({ connectionString: DATABASE_URL, max: 8, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
+const PUBLIC_ORIGIN = new URL(process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT)).origin;
+if (!/^https?:/.test(PUBLIC_ORIGIN)) throw new Error('PUBLIC_SITE_URL must be HTTP or HTTPS');
 const security = createSecurity({ pool, master: SESSION_SECRET,
   bootstrapUser: process.env.ADMIN_USERNAME, bootstrapPassword: process.env.ADMIN_PASSWORD,
-  publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
+  publicOrigin: PUBLIC_ORIGIN,
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
 const bridge = createBridge({ pool });
 const iso = () => new Date().toISOString();
@@ -32,8 +38,8 @@ const validId = x => typeof x === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-
 const secretEqual = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 const error = (res, status, reason) => res.status(status).json({ error: reason });
-async function audit(action, resource, details = {}) {
-  await pool.query('INSERT INTO gameops_audit(actor,action,resource,details) VALUES($1,$2,$3,$4)', [security.currentActor(), action, resource, JSON.stringify(details)]);
+async function audit(action, resource, details = {}, db = pool) {
+  await writeAudit(db, security.currentActor(), action, resource, details);
 }
 // Webhook throughput limiter remains process-local. Login and reauthentication limits use PostgreSQL.
 const hits = new Map();
@@ -93,7 +99,7 @@ CREATE INDEX IF NOT EXISTS gameops_audit_time_idx ON gameops_audit(created_at DE
 CREATE INDEX IF NOT EXISTS gameops_players_last_seen_idx ON gameops_players(last_seen DESC);
 `;
 async function initDB() {
-  await pool.query(ddl); await deep.ensureSchema(pool); await virtualWallet.ensureSchema(pool); await security.init(); await adminOps.ensureSchema(pool);
+  await pool.query(ddl); await settingsSchema.ensureSchema(pool); await deep.ensureSchema(pool); await virtualWallet.ensureSchema(pool); await security.init(); await adminOps.ensureSchema(pool);
   for (const [name, slug, code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]) {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
@@ -128,25 +134,25 @@ app.get('/api/admin/games', route(async (req,res) => {
 app.post('/api/admin/games', route(async (req,res) => {
  const {name,slug,code,platform}=req.body||{};
  if(!valid(name,80)||!valid(slug,60)||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||!valid(code,6)||!valid(platform||'Web / PWA',60))return error(res,400,'Invalid game fields');
- const q=await pool.query('INSERT INTO gameops_games(name,slug,code,platform) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING RETURNING *',[name,slug,code,String(platform||'Web / PWA')]);
- if(!q.rowCount)return error(res,409,'Game slug exists');
- await audit('game.created',q.rows[0].id,{name,slug});res.status(201).json({item:q.rows[0]});
+ const item=await withTransaction(pool,async db=>{
+  const q=await db.query('INSERT INTO gameops_games(name,slug,code,platform) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING RETURNING *',[name,slug,code,String(platform||'Web / PWA')]);
+  if(!q.rowCount)throw new HttpError(409,'Game slug exists');
+  await audit('game.created',q.rows[0].id,{name,slug},db);return q.rows[0];
+ });
+ res.status(201).json({item});
 }));
 app.patch('/api/admin/games/:id', route(async(req,res)=>{
  const {status}=req.body||{};
  if(!validId(req.params.id)||!['Active','Maintenance'].includes(status))return error(res,400,'Invalid game status or id');
- const q=await pool.query('UPDATE gameops_games SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
- if(!q.rowCount)return error(res,404,'Game not found');
- await audit('game.status_changed',req.params.id,{status});res.json({item:q.rows[0],notice:'This setting does not remotely pause an independent game engine'});
-}));
-// Completes the existing Game Edit -> Game Log link; no synthetic events are inserted.
-app.get('/api/admin/deep/games/:id/rounds', route(async(req,res)=>{
- if(!validId(req.params.id))return error(res,400,'Invalid game id');
- const q=await pool.query('SELECT id::text,event_id,round_id,player_ref,stake::text,payout::text,currency,occurred_at FROM gameops_events WHERE game_id=$1 ORDER BY id DESC LIMIT 200',[req.params.id]);
- res.json({items:q.rows});
+ const item=await withTransaction(pool,async db=>{
+  const q=await db.query('UPDATE gameops_games SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
+  if(!q.rowCount)throw new HttpError(404,'Game not found');
+  await audit('game.status_changed',req.params.id,{status},db);return q.rows[0];
+ });
+ res.json({item,notice:'This setting does not remotely pause an independent game engine'});
 }));
 app.get('/api/admin/players',route(async(req,res)=>{
- const q=await pool.query('SELECT p.id,p.player_ref,g.name AS game,p.rounds::text AS rounds,p.last_seen FROM gameops_players p JOIN gameops_games g ON g.id=p.game_id ORDER BY p.last_seen DESC LIMIT 200');res.json({items:q.rows});
+ res.json(await readPlayers(pool,req.query));
 }));
 app.get('/api/admin/rounds',route(async(req,res)=>{
  const q=await pool.query('SELECT e.event_id,e.round_id,g.name AS game,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id ORDER BY e.occurred_at DESC LIMIT 200');res.json({items:q.rows});
@@ -160,35 +166,43 @@ app.get('/api/admin/requests',route(async(req,res)=>{
 app.patch('/api/admin/requests/:id',route(async(req,res)=>{
  const {status,note}=req.body||{};
  if(!validId(req.params.id)||!['approved','rejected'].includes(status)||(note!=null&&!valid(note,500)))return error(res,400,'Invalid decision');
- const q=await pool.query("UPDATE gameops_requests SET status=$1,note=$2,reviewed_at=now() WHERE id=$3 AND status='pending' RETURNING *",[status,note||null,req.params.id]);
- if(!q.rowCount)return error(res,409,'Not found or already reviewed');
- await audit('request.reviewed',req.params.id,{status});res.json({item:q.rows[0],settled:false});
+ const item=await withTransaction(pool,async db=>{
+  const q=await db.query("UPDATE gameops_requests SET status=$1,note=$2,reviewed_at=now() WHERE id=$3 AND status='pending' RETURNING *",[status,note||null,req.params.id]);
+  if(!q.rowCount)throw new HttpError(409,'Not found or already reviewed');
+  await audit('request.reviewed',req.params.id,{status},db);return q.rows[0];
+ });
+ res.json({item,settled:false});
 }));
 app.get('/api/admin/tickets',route(async(req,res)=>{const q=await pool.query('SELECT * FROM gameops_tickets ORDER BY created_at DESC LIMIT 200');res.json({items:q.rows});}));
 app.post('/api/admin/tickets',route(async(req,res)=>{
  const {subject,requester_ref,priority}=req.body||{};
  if(!valid(subject,200)||!valid(requester_ref,120)||!['Low','Medium','High'].includes(priority||'Medium'))return error(res,400,'Invalid ticket fields');
- const q=await pool.query('INSERT INTO gameops_tickets(subject,requester_ref,priority) VALUES($1,$2,$3) RETURNING *',[subject,requester_ref,priority||'Medium']);
- await audit('ticket.created',q.rows[0].id);res.status(201).json({item:q.rows[0]});
+ const item=await withTransaction(pool,async db=>{
+  const q=await db.query('INSERT INTO gameops_tickets(subject,requester_ref,priority) VALUES($1,$2,$3) RETURNING *',[subject,requester_ref,priority||'Medium']);
+  await audit('ticket.created',q.rows[0].id,{},db);return q.rows[0];
+ });
+ res.status(201).json({item});
 }));
 app.patch('/api/admin/tickets/:id',route(async(req,res)=>{
  const {status}=req.body||{};
  if(!validId(req.params.id)||!['Open','Pending','Answered','Closed'].includes(status))return error(res,400,'Invalid ticket status');
- const q=await pool.query('UPDATE gameops_tickets SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
- if(!q.rowCount)return error(res,404,'Ticket not found');await audit('ticket.status_changed',req.params.id,{status});res.json({item:q.rows[0]});
+ const item=await withTransaction(pool,async db=>{
+  const q=await db.query('UPDATE gameops_tickets SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
+  if(!q.rowCount)throw new HttpError(404,'Ticket not found');
+  await audit('ticket.status_changed',req.params.id,{status},db);return q.rows[0];
+ });
+ res.json({item});
 }));
 app.get('/api/admin/settings',route(async(req,res)=>{
  const q=await pool.query('SELECT key,value,version,updated_at FROM gameops_settings ORDER BY key');
- if(req.auth.role==='owner')return res.json({items:q.rows});
+ if(req.auth.role==='owner')return res.json({items:q.rows.map(item=>({...item,validation:validateSetting(item.key,item.value)}))});
  const general=q.rows.find(x=>x.key==='general');
  const allowed=['site_title','base_color','secondary_color','currency','currency_symbol','currency_format','timezone','per_page'];
  res.json({items:general?[{...general,value:Object.fromEntries(Object.entries(general.value).filter(([key])=>allowed.includes(key)))}]:[]});
 }));
 app.put('/api/admin/settings/:key',route(async(req,res)=>{
- const key=req.params.key,value=req.body?.value;
- if(!/^[a-z0-9-]{2,60}$/.test(key)||!value||typeof value!=='object'||Array.isArray(value)||JSON.stringify(value).length>16000)return error(res,400,'Invalid settings object');
- const q=await pool.query("INSERT INTO gameops_settings(key,value,updated_by) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,version=gameops_settings.version+1,updated_at=now(),updated_by=EXCLUDED.updated_by RETURNING key,version,updated_at",[key,JSON.stringify(value),req.auth.username]);
- await audit('settings.saved',key,{version:q.rows[0].version});res.json({item:q.rows[0]});
+ const result=await saveSettings(pool,req.params.key,req.body,req.auth.username);
+ res.json(result);
 }));
 app.get('/api/admin/system',route(async(req,res)=>{
  const db=await pool.query("SELECT current_setting('server_version') AS version,now() AS time");
@@ -202,7 +216,7 @@ app.get('/api/admin/deep/system/:name',route(async(req,res)=>{
 app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_INGESTION_RETIRED',endpoint:'/api/v2/game-bridge'}));
 app.use('/api/v2/game-bridge',(req,res,next)=>{if(!limit('bridge:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
 bridge.mount(app);
-deep.mount(app,{pool,audit});
+deep.mount(app,{pool,audit,publicOrigin:PUBLIC_ORIGIN});
 virtualWallet.mount(app,{pool,currentActor:security.currentActor});
 parity.mount(app,{pool});
 adminOps.mount(app,{pool});
@@ -212,6 +226,8 @@ app.use(security.errorHandler);
 app.use((err,req,res,next)=>{
  console.error('[gameops-error]',err.code||err.type||'REQUEST_FAILED');
  if(res.headersSent)return next(err);
+ if(err instanceof HttpError)return res.status(err.status).json({error:err.message,code:err.code,...(err.details?{details:err.details}:{})});
+ if(['55P03','40001','40P01'].includes(err.code))return res.status(409).json({error:'Concurrent change or lock contention; reload and retry',code:'CONCURRENT_CHANGE'});
  const status=err.type==='entity.too.large'?413:err.type==='entity.parse.failed'||err.code==='22P02'?400:err.code==='23505'?409:500;
  res.status(status).json({error:status===400?'Invalid request':status===409?'Record conflicts with existing data':'Request could not be completed'});
 });
