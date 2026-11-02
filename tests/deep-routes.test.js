@@ -7,6 +7,7 @@ function harness(){
  const app={};
  for(const method of ['get','post','put','patch'])app[method]=(path,handler)=>{routes[method+' '+path]=handler};
  deep.mount(app,{pool:{},audit:async()=>{}});
+ require('../engine/public-content').mount(app,{pool:{}});
  return routes;
 }
 function response(){
@@ -26,7 +27,7 @@ test('reject malformed game ids without touching storage',async()=>{
 });
 test('reject malformed image MIME before database calls',async()=>{
  const routes=harness(),res=response();
- await routes['post /api/admin/deep/games/:gid/image']({params:{gid:'00000000-0000-4000-8000-000000000001'},body:{data:'data:text/plain;base64,AAAA'}},res,()=>{throw Error('Unexpected next')});
+ await routes['post /api/admin/deep/games/:gid/image']({params:{gid:'00000000-0000-4000-8000-000000000001'},body:{data:'data:text/plain;base64,AAAA'}},res,error=>{assert.equal(error.status,400);res.status(error.status).json({error:error.message})});
  assert.equal(res.statusCode,400);
 });
 test('reject unsafe content slug and round ids',async()=>{

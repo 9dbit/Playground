@@ -9,12 +9,16 @@ const { createBridge } = require('./engine/game-bridge');
 const virtualWallet=require('./engine/virtual-wallet');
 const parity=require('./engine/parity');
 const adminOps=require('./engine/admin-operations');
+const {transaction,RequestError}=require('./engine/transaction');
+const settingsSchema=require('./engine/settings-schema');
+const {readPlayers}=require('./engine/player-list');
+const publicContent=require('./engine/public-content');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.12.0';
+const VERSION = '0.14.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -32,8 +36,8 @@ const validId = x => typeof x === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-
 const secretEqual = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
 const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 const error = (res, status, reason) => res.status(status).json({ error: reason });
-async function audit(action, resource, details = {}) {
-  await pool.query('INSERT INTO gameops_audit(actor,action,resource,details) VALUES($1,$2,$3,$4)', [security.currentActor(), action, resource, JSON.stringify(details)]);
+async function audit(action, resource, details = {}, executor = pool) {
+  await executor.query('INSERT INTO gameops_audit(actor,action,resource,details) VALUES($1,$2,$3,$4)', [security.currentActor(), action, resource, JSON.stringify(details)]);
 }
 // Webhook throughput limiter remains process-local. Login and reauthentication limits use PostgreSQL.
 const hits = new Map();
@@ -98,6 +102,8 @@ async function initDB() {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
   await bridge.init();
+  const conflicts=await publicContent.inspectConflicts(pool);
+  console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }
 app.get('/health', route(async (req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'playground-gameops', version: VERSION, db: 'connected', time: iso() }); }
@@ -125,28 +131,29 @@ app.get('/api/admin/summary', route(async (req, res) => {
 app.get('/api/admin/games', route(async (req,res) => {
  const q=await pool.query('SELECT id,name,slug,code,platform,version,status,rounds::text AS rounds,created_at FROM gameops_games ORDER BY created_at,id'); res.json({items:q.rows});
 }));
-app.post('/api/admin/games', route(async (req,res) => {
+app.post('/api/admin/games',route(async(req,res)=>{
  const {name,slug,code,platform}=req.body||{};
- if(!valid(name,80)||!valid(slug,60)||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||!valid(code,6)||!valid(platform||'Web / PWA',60))return error(res,400,'Invalid game fields');
- const q=await pool.query('INSERT INTO gameops_games(name,slug,code,platform) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING RETURNING *',[name,slug,code,String(platform||'Web / PWA')]);
- if(!q.rowCount)return error(res,409,'Game slug exists');
- await audit('game.created',q.rows[0].id,{name,slug});res.status(201).json({item:q.rows[0]});
+ if(!valid(name,80)||!name.trim()||!valid(slug,60)||!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)||!valid(code,6)||!valid(platform||'Web / PWA',60))return error(res,400,'Invalid game fields');
+ const item=await transaction(pool,async db=>{
+  const q=await db.query('INSERT INTO gameops_games(name,slug,code,platform) VALUES($1,$2,$3,$4) ON CONFLICT(slug) DO NOTHING RETURNING *',[name.trim(),slug,code,platform||'Web / PWA']);
+  if(!q.rowCount)throw new RequestError(409,'Game slug exists');
+  await audit('game.created',q.rows[0].id,{name,slug},db);return q.rows[0];
+ });
+ res.status(201).json({item});
 }));
-app.patch('/api/admin/games/:id', route(async(req,res)=>{
+app.patch('/api/admin/games/:id',route(async(req,res)=>{
  const {status}=req.body||{};
  if(!validId(req.params.id)||!['Active','Maintenance'].includes(status))return error(res,400,'Invalid game status or id');
- const q=await pool.query('UPDATE gameops_games SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
- if(!q.rowCount)return error(res,404,'Game not found');
- await audit('game.status_changed',req.params.id,{status});res.json({item:q.rows[0],notice:'This setting does not remotely pause an independent game engine'});
+ const item=await transaction(pool,async db=>{
+  const q=await db.query('UPDATE gameops_games SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
+  if(!q.rowCount)throw new RequestError(404,'Game not found');
+  await audit('game.status_changed',req.params.id,{status},db);return q.rows[0];
+ });
+ res.json({item,notice:'Catalog metadata only; external game engines are unchanged'});
 }));
-// Completes the existing Game Edit -> Game Log link; no synthetic events are inserted.
-app.get('/api/admin/deep/games/:id/rounds', route(async(req,res)=>{
- if(!validId(req.params.id))return error(res,400,'Invalid game id');
- const q=await pool.query('SELECT id::text,event_id,round_id,player_ref,stake::text,payout::text,currency,occurred_at FROM gameops_events WHERE game_id=$1 ORDER BY id DESC LIMIT 200',[req.params.id]);
- res.json({items:q.rows});
-}));
+
 app.get('/api/admin/players',route(async(req,res)=>{
- const q=await pool.query('SELECT p.id,p.player_ref,g.name AS game,p.rounds::text AS rounds,p.last_seen FROM gameops_players p JOIN gameops_games g ON g.id=p.game_id ORDER BY p.last_seen DESC LIMIT 200');res.json({items:q.rows});
+ res.json(await readPlayers(pool,req.query));
 }));
 app.get('/api/admin/rounds',route(async(req,res)=>{
  const q=await pool.query('SELECT e.event_id,e.round_id,g.name AS game,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id ORDER BY e.occurred_at DESC LIMIT 200');res.json({items:q.rows});
@@ -160,35 +167,48 @@ app.get('/api/admin/requests',route(async(req,res)=>{
 app.patch('/api/admin/requests/:id',route(async(req,res)=>{
  const {status,note}=req.body||{};
  if(!validId(req.params.id)||!['approved','rejected'].includes(status)||(note!=null&&!valid(note,500)))return error(res,400,'Invalid decision');
- const q=await pool.query("UPDATE gameops_requests SET status=$1,note=$2,reviewed_at=now() WHERE id=$3 AND status='pending' RETURNING *",[status,note||null,req.params.id]);
- if(!q.rowCount)return error(res,409,'Not found or already reviewed');
- await audit('request.reviewed',req.params.id,{status});res.json({item:q.rows[0],settled:false});
+ const item=await transaction(pool,async db=>{
+  const q=await db.query("UPDATE gameops_requests SET status=$1,note=$2,reviewed_at=now() WHERE id=$3 AND status='pending' RETURNING *",[status,note||null,req.params.id]);
+  if(!q.rowCount)throw new RequestError(409,'Not found or already reviewed');
+  await audit('request.reviewed',req.params.id,{status},db);return q.rows[0];
+ });res.json({item,settled:false});
 }));
 app.get('/api/admin/tickets',route(async(req,res)=>{const q=await pool.query('SELECT * FROM gameops_tickets ORDER BY created_at DESC LIMIT 200');res.json({items:q.rows});}));
 app.post('/api/admin/tickets',route(async(req,res)=>{
  const {subject,requester_ref,priority}=req.body||{};
- if(!valid(subject,200)||!valid(requester_ref,120)||!['Low','Medium','High'].includes(priority||'Medium'))return error(res,400,'Invalid ticket fields');
- const q=await pool.query('INSERT INTO gameops_tickets(subject,requester_ref,priority) VALUES($1,$2,$3) RETURNING *',[subject,requester_ref,priority||'Medium']);
- await audit('ticket.created',q.rows[0].id);res.status(201).json({item:q.rows[0]});
+ if(!valid(subject,200)||!subject.trim()||!valid(requester_ref,120)||!['Low','Medium','High'].includes(priority||'Medium'))return error(res,400,'Invalid ticket fields');
+ const item=await transaction(pool,async db=>{
+  const q=await db.query('INSERT INTO gameops_tickets(subject,requester_ref,priority) VALUES($1,$2,$3) RETURNING *',[subject.trim(),requester_ref,priority||'Medium']);
+  await audit('ticket.created',q.rows[0].id,{},db);return q.rows[0];
+ });res.status(201).json({item});
 }));
 app.patch('/api/admin/tickets/:id',route(async(req,res)=>{
  const {status}=req.body||{};
  if(!validId(req.params.id)||!['Open','Pending','Answered','Closed'].includes(status))return error(res,400,'Invalid ticket status');
- const q=await pool.query('UPDATE gameops_tickets SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
- if(!q.rowCount)return error(res,404,'Ticket not found');await audit('ticket.status_changed',req.params.id,{status});res.json({item:q.rows[0]});
+ const item=await transaction(pool,async db=>{
+  const q=await db.query('UPDATE gameops_tickets SET status=$1,updated_at=now() WHERE id=$2 RETURNING *',[status,req.params.id]);
+  if(!q.rowCount)throw new RequestError(404,'Ticket not found');
+  await audit('ticket.status_changed',req.params.id,{status},db);return q.rows[0];
+ });res.json({item});
 }));
 app.get('/api/admin/settings',route(async(req,res)=>{
  const q=await pool.query('SELECT key,value,version,updated_at FROM gameops_settings ORDER BY key');
- if(req.auth.role==='owner')return res.json({items:q.rows});
+ if(req.auth.role==='owner')return res.json({items:q.rows.map(x=>({...x,validationErrors:settingsSchema.errorsFor(x.key,x.value)}))});
  const general=q.rows.find(x=>x.key==='general');
  const allowed=['site_title','base_color','secondary_color','currency','currency_symbol','currency_format','timezone','per_page'];
  res.json({items:general?[{...general,value:Object.fromEntries(Object.entries(general.value).filter(([key])=>allowed.includes(key)))}]:[]});
 }));
 app.put('/api/admin/settings/:key',route(async(req,res)=>{
- const key=req.params.key,value=req.body?.value;
- if(!/^[a-z0-9-]{2,60}$/.test(key)||!value||typeof value!=='object'||Array.isArray(value)||JSON.stringify(value).length>16000)return error(res,400,'Invalid settings object');
- const q=await pool.query("INSERT INTO gameops_settings(key,value,updated_by) VALUES($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,version=gameops_settings.version+1,updated_at=now(),updated_by=EXCLUDED.updated_by RETURNING key,version,updated_at",[key,JSON.stringify(value),req.auth.username]);
- await audit('settings.saved',key,{version:q.rows[0].version});res.json({item:q.rows[0]});
+ const key=req.params.key,value=settingsSchema.validate(key,req.body?.value);
+ const expected=settingsSchema.expectedVersion(req.body?.expected_version);
+ const item=await transaction(pool,async db=>{
+  let q;
+  if(expected===0)q=await db.query('INSERT INTO gameops_settings(key,value,updated_by) VALUES($1,$2,$3) ON CONFLICT(key) DO NOTHING RETURNING key,version,updated_at',[key,JSON.stringify(value),req.auth.username]);
+  else q=await db.query('UPDATE gameops_settings SET value=$2,version=version+1,updated_at=now(),updated_by=$3 WHERE key=$1 AND version=$4 RETURNING key,version,updated_at',[key,JSON.stringify(value),req.auth.username,expected]);
+  if(!q.rowCount)throw new RequestError(409,'Settings changed in another session. Your edits were not saved; reload the latest version.','SETTINGS_VERSION_CONFLICT');
+  await audit('settings.saved',key,{version:q.rows[0].version},db);return q.rows[0];
+ });
+ res.set('ETag','"'+item.version+'"').json({item});
 }));
 app.get('/api/admin/system',route(async(req,res)=>{
  const db=await pool.query("SELECT current_setting('server_version') AS version,now() AS time");
@@ -206,12 +226,14 @@ deep.mount(app,{pool,audit});
 virtualWallet.mount(app,{pool,currentActor:security.currentActor});
 parity.mount(app,{pool});
 adminOps.mount(app,{pool});
+publicContent.mount(app,{pool});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
 app.use(security.errorHandler);
 app.use((err,req,res,next)=>{
  console.error('[gameops-error]',err.code||err.type||'REQUEST_FAILED');
  if(res.headersSent)return next(err);
+ if(err instanceof RequestError)return res.status(err.status).json({error:err.message,code:err.code});
  const status=err.type==='entity.too.large'?413:err.type==='entity.parse.failed'||err.code==='22P02'?400:err.code==='23505'?409:500;
  res.status(status).json({error:status===400?'Invalid request':status===409?'Record conflicts with existing data':'Request could not be completed'});
 });

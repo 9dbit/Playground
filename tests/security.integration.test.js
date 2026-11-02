@@ -140,11 +140,17 @@ test('CP08 security against a real isolated PostgreSQL schema', { skip: !process
   });
   await t.test('audit identifies the real actor and settings are filtered for non-owners',async()=>{
     const row=await db.query("SELECT actor FROM gameops_audit WHERE action='game.created' AND resource=$1",[gameId]);assert.equal(row.rows[0].actor,'qa_operator');
-    await request('/api/admin/settings/general','PUT',{value:{site_title:'QA',private_marker:'never-return-to-viewer'}},owner);
-    await request('/api/admin/settings/notification','PUT',{value:{private_marker:'never-return-to-viewer'}},owner);
+    const invalid=await request('/api/admin/settings/general','PUT',{value:{site_title:'QA',private_marker:'never-return-to-viewer'},expected_version:0},owner);
+    assert.equal(invalid.status,400,'Unknown settings fields must be rejected');
+    const general=await request('/api/admin/settings/general','PUT',{value:{site_title:'QA',register_bonus:7},expected_version:0},owner);
+    assert.equal(general.status,200,JSON.stringify(general.data));
+    const notification=await request('/api/admin/settings/notification','PUT',{value:{sender:'never-return-to-viewer'},expected_version:0},owner);
+    assert.equal(notification.status,200,JSON.stringify(notification.data));
     const q=await request('/api/admin/settings','GET',undefined,members.viewer);assert.equal(q.status,200);
     assert.equal(JSON.stringify(q.data).includes('never-return-to-viewer'),false);
     assert.equal(q.data.items[0].value.site_title,'QA');
+    assert.equal(q.data.items[0].value.register_bonus,undefined);
+    assert.equal(q.data.items.some(item=>item.key==='notification'),false);
   });
   await t.test('role changes revoke target sessions; owner cannot disable self',async()=>{
     const changed=await request('/api/security/admins/'+members.operator.id,'PATCH',{role:'viewer',status:'active',current_password:ownerPassword,code:recovery[4]},owner);assert.equal(changed.status,200);

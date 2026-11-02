@@ -3,6 +3,7 @@
 // typed database search, an owner-scoped profile, and a narrow safe maintenance job.
 // No vendor credentials, player PII, remote game control or cash settlement.
 const {canAccess}=require('./security-policy');
+const {transaction,RequestError}=require('./transaction');
 const intId=/^[1-9][0-9]{0,17}$/;
 const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const fail=(res,status,message)=>res.status(status).json({error:message});
@@ -125,12 +126,12 @@ function mount(app,{pool}){
  }));
  app.put('/api/admin/ops/profile',wrap(async(req,res)=>{
   const name=typeof req.body?.displayName==='string'?req.body.displayName.trim():'';
-  if(name.length<2||name.length>80||/[<>]/.test(name))return fail(res,400,'Display name must have 2–80 plain characters');
-  const q=await pool.query('UPDATE gameops_admin_accounts SET display_name=$2 WHERE id=$1 AND status=$3 RETURNING id::text,username,display_name AS "displayName",role,status',[req.auth.id,name,'active']);
-  if(!q.rowCount)return fail(res,404,'Administrator missing');
-  await pool.query("INSERT INTO gameops_audit(actor,action,resource,details) VALUES($1,'admin.profile.updated',$2,$3)",
-   [req.auth.username,req.auth.id,JSON.stringify({displayNameChanged:true})]);
-  res.json({ok:true,item:q.rows[0]});
+  if(name.length<2||name.length>80||/[<>]/.test(name))return fail(res,400,'Display name must have 2-80 plain characters');
+  const item=await transaction(pool,async db=>{
+   const q=await db.query('UPDATE gameops_admin_accounts SET display_name=$2 WHERE id=$1 AND status=$3 RETURNING id::text,username,display_name AS "displayName",role,status',[req.auth.id,name,'active']);
+   if(!q.rowCount)throw new RequestError(404,'Administrator missing');
+   await db.query("INSERT INTO gameops_audit(actor,action,resource,details) VALUES($1,'admin.profile.updated',$2,$3)",[req.auth.username,req.auth.id,JSON.stringify({displayNameChanged:true})]);return q.rows[0];
+  });res.json({ok:true,item});
  }));
  app.get('/api/admin/ops/cron',wrap(async(req,res)=>{
   const [conf,last,runs]=await Promise.all([

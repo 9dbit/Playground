@@ -220,9 +220,11 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     app.post('/api/security/sessions/revoke', wrap(async (req, res) => {
       const sid = req.body.session_id;
       if (!UUID.test(sid || '')) throw new AuthError(400, 'Invalid session');
-      const q = await pool.query('DELETE FROM gameops_admin_sessions WHERE id=$1 AND admin_id=$2 RETURNING id', [sid, req.auth.id]);
-      if (!q.rowCount) throw new AuthError(404, 'Session not found');
-      await audit(pool, req.auth.username, 'security.session.revoked', sid);
+      await transaction(async db => {
+        const q = await db.query('DELETE FROM gameops_admin_sessions WHERE id=$1 AND admin_id=$2 RETURNING id', [sid, req.auth.id]);
+        if (!q.rowCount) throw new AuthError(404, 'Session not found');
+        await audit(db, req.auth.username, 'security.session.revoked', sid);
+      });
       const signedOut = sid === req.auth.session_id; if (signedOut) res.clearCookie(COOKIE, { ...cookieOptions, maxAge: undefined });
       res.json({ ok: true, signedOut });
     }));
