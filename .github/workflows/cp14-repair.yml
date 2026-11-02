@@ -1,0 +1,48 @@
+name: CP14 Repair Verification
+on:
+  push:
+    branches: [fix/cp14-p1-p2-backend]
+  pull_request:
+    paths: ['engine/**','server.js','tests/cp14*','.github/workflows/cp14-repair.yml']
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: gameops_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_ephemeral_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gameops_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci_ephemeral_only@127.0.0.1:5432/gameops_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --no-audit --no-fund
+      - run: npm test | tee cp14-tests.log
+      - name: Full application regression
+        run: |
+          if test -f tests/cp14-server.cjs; then node tests/cp14-server.cjs; fi
+      - name: Source archive
+        if: always()
+        run: |
+          mkdir -p cp14-artifacts
+          git archive --format=tar HEAD > cp14-artifacts/source.tar
+          cp package-lock.json cp14-artifacts/package-lock.json
+          cp cp14-tests.log cp14-artifacts/ || true
+          if test -d test-results; then cp -R test-results cp14-artifacts/; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cp14-source-and-evidence
+          path: cp14-artifacts/
+          retention-days: 14
