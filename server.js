@@ -5,22 +5,23 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const deep = require('./engine/deep-routes');
 const { createSecurity } = require('./engine/security');
+const { createBridge } = require('./engine/game-bridge');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
-const EVENT_SECRET = process.env.GAME_EVENT_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.8.0';
-for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET, GAME_EVENT_SECRET: EVENT_SECRET })) {
+const VERSION = '0.9.0';
+for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
-if (SESSION_SECRET.length < 32 || EVENT_SECRET.length < 32) throw new Error('Signing secrets are too short');
+if (SESSION_SECRET.length < 32) throw new Error('Signing secrets are too short');
 const pool = new Pool({ connectionString: DATABASE_URL, max: 8, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const security = createSecurity({ pool, master: SESSION_SECRET,
   bootstrapUser: process.env.ADMIN_USERNAME, bootstrapPassword: process.env.ADMIN_PASSWORD,
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
+const bridge = createBridge({ pool });
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
 const safeInt = x => Number.isSafeInteger(x) && x >= 0 && x <= 1000000000000;
@@ -35,6 +36,7 @@ async function audit(action, resource, details = {}) {
 const hits = new Map();
 function limit(key, max = 200, period = 60000) {
   const now = Date.now(), entry = hits.get(key);
+  if (!entry && hits.size>=10000) return false;
   if (!entry || entry.until < now) { hits.set(key, { count: 1, until: now + period }); return true; }
   entry.count += 1; return entry.count <= max;
 }
@@ -92,6 +94,7 @@ async function initDB() {
   for (const [name, slug, code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]) {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
+  await bridge.init();
 }
 app.get('/health', route(async (req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'playground-gameops', version: VERSION, db: 'connected', time: iso() }); }
@@ -100,10 +103,11 @@ app.get('/health', route(async (req, res) => {
 security.mount(app);
 app.get('/', (req, res) => res.redirect('/engine'));
 app.get('/engine', security.protectedPage('control.html'));
+app.get('/integrations', security.protectedPage('bridge.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
-for (const filename of ['control.js','engine.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
-for (const filename of ['control.css','engine.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['control.css','engine.css','bridge.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([
@@ -191,24 +195,10 @@ app.get('/api/admin/deep/system/:name',route(async(req,res)=>{
  if(!['server','application','cache','update','cron','security'].includes(req.params.name))return error(res,404,'Unknown module');
  res.json({name:req.params.name,readOnly:true,asOf:iso(),appVersion:VERSION,mfaEnabled:req.auth.mfa_enabled,mfaRequired:true,rbacEnabled:true,role:req.auth.role,gameControlConnected:false,message:'Security Center is active. Infrastructure maintenance and game adapters remain disconnected.'});
 }));
-app.post('/api/v1/game-events',route(async(req,res)=>{
- if(!limit('ingest:'+(req.ip||'unknown'),200,60000))return error(res,429,'Rate limit');
- const ts=Number(req.get('X-Event-Timestamp')),signature=req.get('X-Webhook-Signature')||'';
- if(!Number.isFinite(ts)||Math.abs(Date.now()-ts*1000)>300000)return error(res,401,'Expired or invalid timestamp');
- const expected='sha256='+crypto.createHmac('sha256',EVENT_SECRET).update(String(ts)+'.').update(req.rawBody||Buffer.alloc(0)).digest('hex');
- if(!secretEqual(signature,expected))return error(res,401,'Invalid event signature');
- const p=req.body||{};
- if(p.schema_version!==1||p.type!=='round.settled'||p.currency!=='DEMO_COIN'||!valid(p.event_id,120)||!validId(p.game_id)||!valid(p.round_id,120)||!valid(p.game_player_id,120)||!safeInt(p.stake_minor_units)||!safeInt(p.payout_minor_units)||!valid(p.occurred_at,50)||!Number.isFinite(Date.parse(p.occurred_at)))return error(res,400,'Invalid event payload');
- const client=await pool.connect();
- try{
-  await client.query('BEGIN');
-  const q=await client.query('INSERT INTO gameops_events(event_id,game_id,round_id,player_ref,stake,payout,currency,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING event_id',[p.event_id,p.game_id,p.round_id,p.game_player_id,p.stake_minor_units,p.payout_minor_units,p.currency,p.occurred_at]);
-  if(!q.rowCount){await client.query('ROLLBACK');return res.status(200).json({accepted:false,duplicate:true});}
-  await client.query('INSERT INTO gameops_players(game_id,player_ref,rounds) VALUES($1,$2,1) ON CONFLICT(game_id,player_ref) DO UPDATE SET rounds=gameops_players.rounds+1,last_seen=now()',[p.game_id,p.game_player_id]);
-  await client.query('UPDATE gameops_games SET rounds=rounds+1 WHERE id=$1',[p.game_id]);
-  await client.query('COMMIT');res.status(202).json({accepted:true,event_id:p.event_id});
- }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
-}));
+// CP08 shared-key ingestion is retired. New integrations have immutable per-game scopes.
+app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_INGESTION_RETIRED',endpoint:'/api/v2/game-bridge'}));
+app.use('/api/v2/game-bridge',(req,res,next)=>{if(!limit('bridge:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
+bridge.mount(app);
 deep.mount(app,{pool,audit});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
