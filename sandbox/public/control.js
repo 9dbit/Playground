@@ -58,6 +58,7 @@ const settingFields={
 const flags={general:'Partial runtime styling',logo:'Stored only',configuration:'Stored only',notification:'Stored only',seo:'Stored only',kyc:'No verification provider',social:'No OAuth connected',language:'Stored only',extensions:'No extension runner',cron:'No scheduler',maintenance:'Public content enforcement',gdpr:'No consent service',css:'Execution disabled',sitemap:'Live generated endpoint',robots:'Live public endpoint'};
 let token='',route='',renderSequence=0,expanded=new Set(['Manage Games','Manage Users']),mobile=false,settingCache=null,searchTerm='';
 let queuedImage=null;
+const gameLogQueries=Object.create(null);
 function go(r){const next='#/'+r;if(location.hash===next){render()}else location.hash=next;mobile=false}
 function getRoute(){return decodeURIComponent((location.hash||'#/dashboard').replace(/^#\/?/,''))||'dashboard'}
 function nav(){return '<aside class="sidebar '+(mobile?'mobile-open':'')+'"><div class="brand">◈ PLAY<span>GROUND</span><small>CONTROL</small></div>'+
@@ -93,7 +94,7 @@ async function dashboard(){const [d,s,g]=await Promise.all([api(apiBase+'deep/su
 async function games(){const q=await api(apiBase+'deep/games');
  return heading('Manage Games','Catalog, demo-only configuration, artwork and game log','','<button class="btn" data-action="game-create">+ Add Game</button>')+
  notice('Game status here is catalog metadata; it does not remotely pause or configure the separate game engines.')+
- table(['Name','Status','Featured','Trending','Rounds','Action'],q.items.map(x=>[link(x.name,'game/'+x.id),badge(x.status),badge(x.featured),badge(x.trending),E(x.rounds),link('Edit / Details →','game/'+x.id)]));
+ table(['Name','Status','Featured','Trending','Rounds','Game Log','Action'],q.items.map(x=>[link(x.name,'game/'+x.id),badge(x.status),badge(x.featured),badge(x.trending),E(x.rounds),link('View Log','game-rounds/'+x.id),link('Edit / Details →','game/'+x.id)]));
 }
 async function game(id){const data=await api(apiBase+'deep/games/'+id);const g=data.item;
  return heading('Update '+g.name,'Game Details · settings are versioned · no live outcome modification','games',link('View Game Log','game-rounds/'+g.id))+
@@ -105,13 +106,41 @@ async function game(id){const data=await api(apiBase+'deep/games/'+id);const g=d
  '<section class="panel"><h2>Game Instructions</h2>'+formFields([['Instructions (safe plain text; rich text editor planned)','instructions','textarea',g.instructions]])+
  '<div class="form-actions"><button class="btn" type="submit">Save Configuration</button></div></section></form>';
 }
-async function gameRounds(id){const [g,rr]=await Promise.all([api(apiBase+'deep/games/'+id),api(apiBase+'deep/games/'+id+'/rounds')]);
- return heading('Game Log · '+g.item.name,'Immutable events received from the signed game endpoint','game/'+id)+
- table(['Event','Round','Player','Stake','Payout','Occurred'],rr.items.map(x=>[E(x.event_id),link(x.round_id,'round/'+x.id),E(x.player_ref),n(x.stake),n(x.payout),fmt(x.occurred_at)]));
+function gameLogRoute(id,filter='all',page=1){return 'game-rounds/'+id+'/'+filter+'/'+page}
+function pageControls(q,onPage){
+ const page=Number(q.page||1),pages=Number(q.pages||0);
+ return '<div class="toolbar paging-controls"><span class="muted">Page '+n(page)+' / '+n(Math.max(1,pages))+' · '+n(q.total||0)+' observed records</span>'+
+ (page>1?'<button class="btn ghost" data-go="'+E(onPage(page-1))+'">← Previous</button>':'')+
+ (q.hasNext?'<button class="btn ghost" data-go="'+E(onPage(page+1))+'">Next →</button>':'')+'</div>';
 }
-async function roundList(playerId){const q=playerId?await api(apiBase+'deep/players/'+playerId+'/rounds'):await api(apiBase+'deep/rounds');
- return heading(playerId?'Player Rounds':'Game Log','Read-only signed event history',playerId?'player/'+playerId:'games')+
- table(['Round','Game','Player','Stake','Payout','Date'],q.items.map(x=>[link(x.round_id,x.id?'round/'+x.id:'rounds'),E(x.game||''),E(x.player_ref||''),n(x.stake),n(x.payout),fmt(x.occurred_at)]));
+async function gameRounds(id,filter='all',page=1){
+ const result=['win','loss','draw'].includes(filter)?filter:'all';
+ const numPage=/^[1-9][0-9]{0,3}$/.test(String(page||1))?Math.min(1000,Number(page)):1;
+ const q=(gameLogQueries[id]||'').trim();
+ const params=new URLSearchParams({result,page:String(numPage),limit:'25',q});
+ const [g,rr]=await Promise.all([api(apiBase+'deep/games/'+id),api(apiBase+'deep/games/'+id+'/rounds?'+params)]);
+ const tabs=['all','win','loss','draw'].map(value=>
+  '<button class="btn '+(result===value?'':'ghost')+'" data-go="'+E(gameLogRoute(id,value,1))+'">'+({all:'All',win:'Net Win',loss:'Net Loss',draw:'Draw'}[value])+'</button>').join('');
+ return heading('Game Log · '+g.item.name,'Game-specific observed rounds, read-only','game/'+id)+
+ notice(rr.note||'Observed game events only; not a verified external settlement feed.','warn')+
+ '<form id="game-log-filter" class="toolbar" data-game="'+E(id)+'" data-result="'+E(result)+'">'+
+ '<input class="qsearch" name="q" maxlength="80" placeholder="Search round, player reference or event ID" value="'+E(q)+'" aria-label="Search game rounds">'+
+ '<button class="btn" type="submit">Search</button><button class="btn ghost" type="button" data-action="game-log-clear" data-game="'+E(id)+'" data-filter="'+E(result)+'">Clear</button></form>'+
+ '<div class="tabs">'+tabs+'</div>'+
+ table(['Event ID','Round','Player','Stake','Payout','Net Result','Currency','Occurred'],
+ rr.items.map(x=>[E(x.event_id),link(x.round_id,'round/'+x.id),x.player_id?link(x.player_ref,'player/'+x.player_id):E(x.player_ref),
+ n(x.stake),n(x.payout),badge(x.result),E(x.currency),fmt(x.occurred_at)]))+
+ pageControls(rr,next=>gameLogRoute(id,result,next));
+}
+async function roundList(playerId,page=1){
+ const numPage=/^[1-9][0-9]{0,3}$/.test(String(page||1))?Math.min(1000,Number(page)):1;
+ const q=playerId?await api(apiBase+'deep/players/'+playerId+'/rounds?page='+numPage+'&limit=25'):await api(apiBase+'deep/rounds');
+ return heading(playerId?'Player Rounds':'Game Log','Read-only observed event history',playerId?'player/'+playerId:'games')+
+ (playerId?notice(q.note||'These are observed event records, not verified external balance settlements.','warn'):'')+
+ table(['Round','Game','Player','Stake','Payout','Net Result','Date'],q.items.map(x=>[
+ link(x.round_id,x.id?'round/'+x.id:'rounds'),E(x.game||''),E(x.player_ref||''),n(x.stake),n(x.payout),
+ badge(x.result|| (Number(x.payout)>Number(x.stake)?'win':Number(x.payout)<Number(x.stake)?'loss':'draw')),fmt(x.occurred_at)]))+
+ (playerId?pageControls(q,next=>'player-rounds/'+playerId+'/'+next):'');
 }
 async function round(id){const d=await api(apiBase+'deep/rounds/'+id);const x=d.item;
  return heading('Round '+x.round_id,'Immutable settled round detail','rounds')+notice('Evidence only. Editing, re-settlement and reversal are not supported.')+
@@ -126,8 +155,8 @@ async function players(state){if(['email','mobile','kyc','kyc-pending'].includes
 async function player(id){const [d,w]=await Promise.all([api(apiBase+'deep/players/'+id),api(apiBase+'virtual-wallets/'+id)]),p=d.item;
  const fields=[['First Name','first_name','text',p.first_name],['Last Name','last_name','text',p.last_name],['City','city','text',p.city],['State','state','text',p.state],['ZIP/Postal','zip','text',p.zip],['Country','country','text',p.country],['Local Status (not enforced in game)','local_status','select',p.local_status,'active|review|blocked_locally'],['Admin Note','admin_note','textarea',p.admin_note]];
  return heading('User Detail · '+p.player_ref,'Pseudonymous player · '+p.game,'players/all')+
- '<div class="stats">'+metric('Virtual Balance · DEMO_COIN',n(w.balance),'◇','wallet/'+p.id)+metric('Total Played',n(p.total_played),'◈','player-rounds/'+p.id)+metric('Total Win',n(p.total_win),'◆','player-rounds/'+p.id)+metric('Net Return',n(p.net_return),'◎','player-rounds/'+p.id)+'</div>'+
- '<div class="toolbar"><button class="btn ghost" data-action="wallet-credit" data-id="'+E(id)+'">+ Virtual Balance</button><button class="btn ghost" data-action="wallet-debit" data-id="'+E(id)+'">− Virtual Balance</button><button class="btn ghost" data-go="wallet/'+E(id)+'">Ledger</button><button class="btn ghost" data-go="report/logins">Logins</button><button class="btn ghost" data-go="report/notifications">Notifications</button><button class="btn ghost" disabled>Login as User (disabled)</button></div>'+
+ '<div class="stats">'+metric('Virtual Balance · DEMO_COIN',n(w.balance),'◇','wallet/'+p.id)+metric('Total Played',n(p.total_played),'◈','player-rounds/'+p.id)+metric('Observed Payout',n(p.total_win),'◆','player-rounds/'+p.id)+metric('Net Return',n(p.net_return),'◎','player-rounds/'+p.id)+'</div>'+
+ '<div class="toolbar"><button class="btn ghost" data-action="wallet-credit" data-id="'+E(id)+'">+ Virtual Balance</button><button class="btn ghost" data-action="wallet-debit" data-id="'+E(id)+'">− Virtual Balance</button><button class="btn ghost" data-go="wallet/'+E(id)+'">Ledger</button><button class="btn ghost" disabled title="External player login source not connected">Player Logins unavailable</button><button class="btn ghost" disabled title="Player notification provider not connected">Player Notifications unavailable</button><button class="btn ghost" disabled>Login as User (disabled)</button></div>'+
  notice('Virtual wallet is internal DEMO_COIN only, with an audited ledger. It does not sync with external games. KYC, email/mobile verification, user 2FA and impersonation remain disabled.','warn')+
  '<form class="panel" id="player-edit" data-id="'+E(id)+'"><h2>Profile Metadata</h2><input type="hidden" name="version" value="'+E(p.version)+'">'+formFields(fields)+
  '<div class="form-actions"><button class="btn" type="submit">Save Metadata</button></div></form>';
@@ -315,12 +344,12 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  if(a==='parity')return parity();
  if(a==='games')return games();
  if(a==='game')return game(b);
- if(a==='game-rounds')return gameRounds(b);
+ if(a==='game-rounds')return gameRounds(b,c,parts[3]);
  if(a==='rounds')return roundList();
  if(a==='round')return round(b);
  if(a==='players')return players(b||'all');
  if(a==='player')return player(b);
- if(a==='player-rounds')return roundList(b);
+ if(a==='player-rounds')return roundList(b,c);
  if(a==='diamonds')return diamonds(b||'all');
  if(a==='request')return request(b);
  if(a==='tickets')return tickets(b||'all');
@@ -389,6 +418,7 @@ document.addEventListener('click',async e=>{
   if(a==='mobile'){mobile=!mobile;return render()}
   if(a==='close'){document.querySelector('.modal-screen')?.remove();return}
   if(a==='refresh')return render();
+  if(a==='game-log-clear'){delete gameLogQueries[btn.dataset.game];go(gameLogRoute(btn.dataset.game,btn.dataset.filter||'all',1));return}
   if(a==='activity-read'){await api(apiBase+'ops/notifications/'+btn.dataset.id+'/read','POST',{});toast('Notification marked as read');return render()}
   if(a==='activity-read-all'){await api(apiBase+'ops/notifications/read-all','POST',{});toast('All visible activity marked as read');return render()}
   if(a==='cron-run'){const d=await api(apiBase+'ops/cron/run','POST',{});toast('Maintenance completed · '+n(d.run?.cleaned_sessions||0)+' expired sessions cleaned');return render()}
@@ -409,10 +439,11 @@ document.addEventListener('click',async e=>{
  }catch(err){toast('Error: '+err.message)}
 });
 document.addEventListener('submit',async e=>{
- const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form','profile-save'].includes(form.id))return;
+ const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form','profile-save','game-log-filter'].includes(form.id))return;
  e.preventDefault();
  try{
   const v=formValues(form);
+  if(form.id==='game-log-filter'){const id=form.dataset.game,q=String(v.q||'').trim();if(q.length>80)throw Error('Search too long');gameLogQueries[id]=q;go(gameLogRoute(id,form.dataset.result||'all',1));return}
   if(form.id==='profile-save'){await api(apiBase+'ops/profile','PUT',{displayName:String(v.displayName||'')});toast('Profile updated and audited');return render()}
   if(form.id==='game-edit'){const id=form.dataset.id;const r=await api(apiBase+'deep/games/'+id,'PUT',v);if(queuedImage){await api(apiBase+'deep/games/'+id+'/image','POST',{data:await toImage(queuedImage)});queuedImage=null}toast('Version '+r.version+' saved · live engine unchanged');return render()}
   if(form.id==='player-edit'){const r=await api(apiBase+'deep/players/'+form.dataset.id,'PUT',v);toast('Profile metadata saved · version '+r.version);return render()}

@@ -13,3 +13,5 @@ Run `npm test`, then `npm start` (no npm dependencies). CI separately tests 56 m
 PR #5's production development-link access remains unmerged and was NOT activated. This new static application does not include its authentication changes.
 
 Checkpoint 11 update: global search, read/unread activity, profile editing, cron job history and manual-run UI are strictly synthetic browser-tab fixtures. No real cron timer, session cleanup, admin login, outbound traffic or server API is enabled.
+
+CP12: Game Edit percentages, Game Log and Player Rounds now use *synthetic* round page filtering and local-tab persistence. No live gaming API, settlement or player identity is connected; the portal remains without login only because it is an isolated simulator.

@@ -15,7 +15,7 @@ with sync_playwright() as p:
  checks.append('anonymous browser opens dashboard directly; no login or MFA')
  page.screenshot(path=str(out/'sandbox-desktop.png'),full_page=True)
  gid='10000000-0000-4000-8000-000000000001';pid='20000000-0000-4000-8000-000000000001';tid='40000000-0000-4000-8000-000000000001'
- routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','parity','activity','cron','profile','report/transactions/win','report/transactions/loss','wallet/'+pid,'game/'+gid,'game-rounds/'+gid,'player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
+ routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','parity','activity','cron','profile','report/transactions/win','report/transactions/loss','wallet/'+pid,'game/'+gid,'game-rounds/'+gid,'game-rounds/'+gid+'/win/1','player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
  routes+=['setting/'+s for s in ['general','logo','configuration','notification','seo','kyc','social','language','extensions','cron','maintenance','gdpr','css','sitemap','robots']]
  for r in routes:
   page.goto(base+'/engine#/'+r);page.locator('h1').wait_for();assert page.locator('h1').inner_text()!='Load failed',r
@@ -28,6 +28,22 @@ with sync_playwright() as p:
  assert page.locator('input[name=winning_chance]').count()==1
  assert page.locator('input[name=win_amount]').count()==1
  checks.append('game sandbox chance and win amount fields remain editable')
+
+ page.goto(base+'/engine#/game-rounds/'+gid);page.get_by_role('heading',name='Game Log',exact=False).wait_for()
+ assert page.locator('.table tbody tr').count()==2
+ page.locator('#game-log-filter input[name=q]').fill('demo-round-0-1')
+ page.locator('#game-log-filter button[type=submit]').click()
+ page.get_by_text('1 observed records').wait_for()
+ assert page.locator('.table tbody tr').count()==1
+ page.locator('[data-action=game-log-clear]').click()
+ page.get_by_text('2 observed records').wait_for()
+ page.locator('[data-go$="/win/1"]').first.click()
+ page.get_by_text('1 observed records').wait_for()
+ checks.append('game-specific log filter and search simulate in browser only')
+ page.goto(base+'/engine#/player-rounds/'+pid+'/1');page.get_by_role('heading',name='Player Rounds').wait_for()
+ assert page.locator('.table tbody tr').count()==2
+ checks.append('player-scoped round records remain navigable')
+
  page.goto(base+'/engine#/wallet/'+pid);page.get_by_role('heading',name='Virtual Wallet',exact=False).wait_for()
  assert page.locator('.stats').count()==1
  page.locator('[data-action=wallet-credit]').first.click()

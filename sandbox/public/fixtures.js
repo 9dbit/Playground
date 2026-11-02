@@ -26,6 +26,21 @@ function one(items,id){const item=items.find(x=>x.id===id);if(!item)error('Synth
 function log(action){db.audit.unshift({id:uuid(),actor:'sandbox-demo',action,resource:'browser-only',details:{simulation:true},created_at:now()});db.audit=db.audit.slice(0,100);}
 function response(data,status=200){return new Response(JSON.stringify({...data,sandbox:true,productionConnected:false}),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Playground-Simulation':'true'}});}
 function matches(pattern,p){return p.match(pattern);}
+
+function roundPageFixtures(source,url){
+ const page=Number(url.searchParams.get('page')||1),limit=Number(url.searchParams.get('limit')||25);
+ const result=url.searchParams.get('result')||'all',q=(url.searchParams.get('q')||'').trim().toLowerCase();
+ if(!Number.isSafeInteger(page)||page<1||page>1000||!Number.isSafeInteger(limit)||limit<1||limit>100||
+   !['all','win','loss','draw'].includes(result)||q.length>80)error('Invalid observed round filters');
+ const rows=source.map(x=>({...x,player_id:db.players.find(p=>p.game_id===x.game_id&&p.player_ref===x.player_ref)?.id,
+   result:Number(x.payout)>Number(x.stake)?'win':Number(x.payout)<Number(x.stake)?'loss':'draw'}))
+   .filter(x=>(result==='all'||x.result===result)&&(!q||[x.round_id,x.event_id,x.player_ref].some(y=>y.toLowerCase().includes(q))))
+   .sort((a,b)=>Number(b.id)-Number(a.id));
+ return {items:rows.slice((page-1)*limit,page*limit),total:rows.length,page,limit,pages:Math.ceil(rows.length/limit),
+  hasNext:page*limit<rows.length,filters:{q,result},roundsReadOnly:true,externalSettlementVerified:false,
+  note:'SIMULATION: browser-only virtual observations, no actual settlement.'};
+}
+
 window.fetch=async(input,opts={})=>{
  try{
   const u=new URL(typeof input==='string'?input:input.url,location.origin);
@@ -94,10 +109,10 @@ window.fetch=async(input,opts={})=>{
    }
 
    else if(['/api/admin/games','/api/admin/deep/games'].includes(p))result={items:db.games};
-   else if((match=matches(/^\/api\/admin\/deep\/games\/([^/]+)\/rounds$/,p)))result={items:db.rounds.filter(x=>x.game_id===match[1])};
+   else if((match=matches(/^\/api\/admin\/deep\/games\/([^/]+)\/rounds$/,p))){one(db.games,match[1]);result=roundPageFixtures(db.rounds.filter(x=>x.game_id===match[1]),u);}
    else if((match=matches(/^\/api\/admin\/deep\/games\/([^/]+)$/,p)))result={item:one(db.games,match[1])};
    else if(['/api/admin/players','/api/admin/deep/players'].includes(p)){const state=u.searchParams.get('state')||'all';result={items:db.players.filter(x=>state==='all'||x.local_status===state||state==='banned'&&x.local_status==='blocked_locally')};}
-   else if((match=matches(/^\/api\/admin\/deep\/players\/([^/]+)\/rounds$/,p))){const x=one(db.players,match[1]);result={items:db.rounds.filter(r=>r.game_id===x.game_id&&r.player_ref===x.player_ref)};}
+   else if((match=matches(/^\/api\/admin\/deep\/players\/([^/]+)\/rounds$/,p))){const x=one(db.players,match[1]);result=roundPageFixtures(db.rounds.filter(r=>r.game_id===x.game_id&&r.player_ref===x.player_ref),u);}
    else if((match=matches(/^\/api\/admin\/deep\/players\/([^/]+)$/,p)))result={item:one(db.players,match[1]),balanceEnabled:false,kycConnected:false,impersonationEnabled:false};
    else if(['/api/admin/rounds','/api/admin/deep/rounds'].includes(p))result={items:db.rounds};
    else if((match=matches(/^\/api\/admin\/deep\/rounds\/([^/]+)$/,p)))result={item:one(db.rounds,match[1]),immutable:true};
@@ -142,7 +157,7 @@ window.fetch=async(input,opts={})=>{
    const item={...seed().games[0],id:uuid(),name:String(b.name).slice(0,100),slug:String(b.slug).slice(0,80),code:String(b.code).slice(0,12),platform:String(b.platform||'Simulation').slice(0,80),rounds:'0'};db.games.push(item);result={item};
   }else if(m==='PUT'&&(match=matches(/^\/api\/admin\/deep\/games\/([^/]+)$/,p))){
    const x=one(db.games,match[1]);if(Number(b.version)!==x.version)error('Fixture changed; reload',409);
-   if(!b.name||b.demo_chance<0||b.demo_chance>100||b.min_invest>b.max_invest)error('Invalid demo configuration');
+   if(!b.name||[b.demo_chance,b.winning_chance,b.win_amount].some(n=>!Number.isInteger(n)||n<0||n>100)||b.min_invest>b.max_invest)error('Invalid demo configuration');
    for(const k of ['name','code','platform','demo_chance','winning_chance','win_amount','invest_enabled','min_invest','max_invest','trending','featured','instructions'])x[k]=b[k];x.version++;result={ok:true,version:x.version,externalEngineAffected:false};
   }else if(m==='POST'&&(match=matches(/^\/api\/admin\/deep\/games\/([^/]+)\/image$/,p))){const x=one(db.games,match[1]);if(!/^data:image\/(jpeg|png|webp);base64,/.test(b.data||''))error('Image required');x.image=b.data;x.has_image=true;result={ok:true};
   }else if(m==='PATCH'&&(match=matches(/^\/api\/admin\/games\/([^/]+)$/,p))){const x=one(db.games,match[1]);if(!['Active','Maintenance'].includes(b.status))error('Invalid fixture state');x.status=b.status;result={item:x};
