@@ -26,6 +26,16 @@
   function render(sessions = []) {
     $('identity').textContent = account.displayName + ' / ' + account.role;
     const alert = $('page-alert');
+    if (account.development) {
+      $('identity').textContent = account.displayName + ' / Development';
+      document.querySelector('.page-heading h1').textContent = 'Development access';
+      document.querySelector('.page-heading .subtle').textContent = 'Your development dashboard session and access status.';
+      alert.className = 'notice';
+      alert.textContent = 'Development access is active. Open the dashboard directly; no password or authenticator setup is needed for this session.';
+      const rows = sessions.map(s => '<tr><td><span class="tag success">This development session</span></td><td>' + E(s.ip) + '<br><small>' + E(s.user_agent) + '</small></td><td>' + E(date(s.last_seen)) + '</td><td>' + E(date(s.expires_at)) + '</td><td><button class="danger" data-action="revoke" data-id="' + E(s.id) + '" type="button">Revoke</button></td></tr>').join('');
+      $('security-content').innerHTML = '<section class="panel"><div class="panel-title"><h2>Development dashboard access</h2><span class="tag success">Active</span></div><p class="subtle">You can use the operational dashboard with this development session. Administrator credentials and authenticator settings are managed through account sign in.</p><p class="subtle">Session expires: ' + E(date(account.expiresAt)) + '. Keep your private development link to open a new session.</p><a class="primary" href="/engine">Open admin dashboard</a></section><section class="panel"><h2>Your development session</h2><p class="subtle">Revoking this session signs out this browser. No password or authenticator setup is required to reopen a valid development link.</p><div class="table-wrap"><table class="table"><thead><tr><th>Session</th><th>Client</th><th>Last seen</th><th>Expires</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>';
+      return;
+    }
     alert.className = 'notice' + (account.setupRequired ? ' warning' : '');
     alert.textContent = account.passwordChangeRequired ? 'Step 1 of 2: change your temporary password. Operational access stays locked until you also verify an authenticator.' :
       !account.mfaEnabled ? 'Step 2 of 2: enroll an authenticator and verify a code. Do not share your setup key. Keep recovery codes offline.' :
@@ -50,7 +60,7 @@
   async function load() {
     account = await request('/api/auth/session');
     const sessions = await request('/api/security/sessions');
-    admins = account.role === 'owner' && !account.setupRequired ? (await request('/api/security/admins')).items : [];
+    admins = !account.development && account.role === 'owner' && !account.setupRequired ? (await request('/api/security/admins')).items : [];
     render(sessions.items);
   }
   document.addEventListener('submit', async event => {
@@ -98,3 +108,4 @@
   });
   load().catch(error => { $('page-alert').textContent = error.message; $('page-alert').className = 'notice warning'; });
 })();
+

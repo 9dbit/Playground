@@ -44,9 +44,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node tests/security-ui.cjs
       - run: node tests/bridge-ui.cjs
+      - run: node tests/development-ui.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: security-ui-evidence
           path: test-results/
           retention-days: 7
+
