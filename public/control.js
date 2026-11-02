@@ -30,7 +30,7 @@ const settingItems=[
  ['social','Social Login Setting','Provider setup planning','◉'],
  ['language','Language','Locale planning','文'],
  ['extensions','Extensions','External integrations','✣'],
- ['cron','Cron Job Setting','Job monitoring (not scheduled)','◷'],
+ ['cron','Cron Job Setting','Local cleanup scheduler and run history','◷'],
  ['policies','Policy Pages','Editable public policy documents','♜'],
  ['maintenance','Maintenance Mode','Controls public informational pages','⚒'],
  ['gdpr','GDPR Cookie','Consent policy planning','◌'],
@@ -48,7 +48,7 @@ const settingFields={
  social:[['Google OAuth Enabled (not connected)','google','checkbox',false],['Apple OAuth Enabled (not connected)','apple','checkbox',false]],
  language:[['Default Locale','default_locale','select','en','en|id'],['Supported Locales','supported','text','en,id']],
  extensions:[['Plugin Registry URL','registry_url','text',''],['Allow Extensions (not connected)','enabled','checkbox',false]],
- cron:[['Intended Schedule','schedule','text','0 0 * * *'],['Task Description','description','text','Not scheduled']],
+ cron:[['Enable Automatic Safe Cleanup','enabled','checkbox',false],['Run Every (minutes)','interval_minutes','select','10','5|10|15|30|60'],['Task Description','description','text','Expired sessions only']],
  maintenance:[['Public Maintenance Enabled','enabled','checkbox',false],['Visitor Message','message','textarea','Maintenance in progress']],
  gdpr:[['Cookie Notice Text','notice','textarea',''],['Require Consent (not connected)','required','checkbox',false]],
  css:[['Custom CSS (stored, never executed)','draft','textarea','']],
@@ -64,7 +64,7 @@ function nav(){return '<aside class="sidebar '+(mobile?'mobile-open':'')+'"><div
  sidebar.map(([title,target,children])=>'<div class="nav-group"><button class="nav-root '+(route===target?'active':'')+'" data-root="'+E(title)+'" '+(children.length?'':'data-go="'+E(target)+'"')+'><span>◈</span>'+E(title)+(children.length?'<span class="arrow">'+(expanded.has(title)?'⌃':'⌄')+'</span>':'')+'</button>'+
  (children.length&&expanded.has(title)?'<div class="nav-children">'+children.map(([r,label])=>'<button class="nav-child '+(route===r?'active':'')+'" data-go="'+E(r)+'">'+E(label)+'</button>').join('')+'</div>':'')+'</div>').join('')+
  '<div class="nav-footer">Playground · Engine v0.7<br>Source: Checkpoint 06 audit</div></aside>'}
-function shell(content){return '<div class="layout">'+nav()+'<section class="content-wrap"><header class="topbar"><div class="top-left"><button class="icon-btn navmobile" data-action="mobile">☰</button><button class="search" data-action="search">⌕ Search menus <kbd>Ctrl + K</kbd></button></div><div class="top-actions"><button class="icon-btn desktop" data-go="notify" title="Notification history">♧</button><button class="icon-btn desktop" data-go="extra/server" title="System information">⚙</button><button class="icon-btn" data-action="refresh">⟳</button><button class="icon-btn" data-action="logout">admin ▾</button></div></header><main class="main">'+content+'<footer class="footer">Playground Control Center · Data backed by PostgreSQL unless marked otherwise · No external game control or wallet settlement</footer></main></section></div>'}
+function shell(content){return '<div class="layout">'+nav()+'<section class="content-wrap"><header class="topbar"><div class="top-left"><button class="icon-btn navmobile" data-action="mobile">☰</button><button class="search" data-action="search">⌕ Search menus <kbd>Ctrl + K</kbd></button></div><div class="top-actions"><button class="icon-btn desktop" data-go="activity" title="Notification Center">♧ <span class="notif-count" id="notif-count" hidden></span></button><button class="icon-btn desktop" data-go="extra/server" title="System information">⚙</button><button class="icon-btn" data-action="refresh">⟳</button><button class="icon-btn" data-go="profile" title="Administrator profile">admin ▾</button><button class="icon-btn" data-action="logout" title="Sign out">⏻</button></div></header><main class="main">'+content+'<footer class="footer">Playground Control Center · Data backed by PostgreSQL unless marked otherwise · No external game control or wallet settlement</footer></main></section></div>'}
 function heading(title,subtitle='',back='',extra=''){return '<div class="head"><div><div class="crumb">PLAYGROUND / '+E(route.replaceAll('/',' / '))+'</div><h1>'+E(title)+'</h1><p>'+E(subtitle)+'</p></div><div class="actions">'+(back?'<button class="btn ghost" data-go="'+E(back)+'">← Back</button>':'')+extra+'</div></div>'}
 function notice(s,kind=''){return '<div class="notice '+kind+'">'+E(s)+'</div>'}
 function badge(s){const a=String(s||'');return '<span class="pill '+(/active|approved|published|verified|open|true|subscribed/i.test(a)?'good':/failed|rejected|banned|blocked/i.test(a)?'danger':'warning')+'">'+E(a)+'</span>'}
@@ -84,9 +84,9 @@ async function api(path,method='GET',body){const headers={'Accept':'application/
  const data=await r.json().catch(()=>({error:'Invalid server response'}));if(!r.ok)throw Error(data.error||'Request failed');return data}
 function toast(message){document.querySelector('.toast')?.remove();const x=document.createElement('div');x.className='toast';x.textContent=message;document.body.appendChild(x);setTimeout(()=>x.remove(),4200)}
 async function dashboard(){const [d,s,g]=await Promise.all([api(apiBase+'deep/summary'),api(apiBase+'summary'),api(apiBase+'deep/games')]);
- const v=[metric('Games',d.games.total,'◈','games'),metric('Active Catalog Entries',d.games.active,'◉','games'),metric('Observed Players',d.players.total,'♙','players/all'),metric('Settled Rounds',s.rounds,'▧','rounds'),metric('Total Played · Demo Coin',n(s.stake),'◈','report/transactions'),metric('Total Win · Demo Coin',n(s.payout),'◇','report/transactions'),metric('Support Tickets',d.tickets.total,'▤','tickets/all'),metric('Subscribers',d.subscribers,'♧','subscribers')];
- return heading('Dashboard','Overview from persistent database. Integrations are not yet connected.')+
- notice('Zero integration adapters: Skygate 5000, UNO LUCK and Mahjong Wild are catalog entries only. No live game controls or cash balances.')+
+ const v=[metric('Games',d.games.total,'◈','games'),metric('Active Catalog Entries',d.games.active,'◉','games'),metric('Observed Players',d.players.total,'♙','players/all'),metric('Observed Rounds',s.rounds,'▧','rounds'),metric('Total Played · Demo Coin',n(s.stake),'◈','report/transactions'),metric('Observed Payout · Demo Coin',n(s.payout),'◇','report/transactions/win'),metric('Support Tickets',d.tickets.total,'▤','tickets/all'),metric('Subscribers',d.subscribers,'♧','subscribers')];
+ return heading('Dashboard','Verified local records; external player login and settlement feeds are incomplete.','','<button class="btn ghost" data-go="cron">◷ Cron Setup</button>')+
+ notice('Heartbeat can confirm a game connection but not every game round or wallet settlement. Local DEMO_COIN amounts are not cash balances.')+
  '<div class="stats">'+v.join('')+'</div><div class="panel"><h2>Game Registry</h2></div>'+
  table(['Game','Build','State','Sessions','Open'],g.items.map(x=>[link(x.name,'game/'+x.id),E(x.version),badge(x.status),E(x.rounds),link('Configure →','game/'+x.id)]));
 }
@@ -153,9 +153,10 @@ async function ticket(id){const d=await api(apiBase+'deep/tickets/'+id),x=d.item
  '<div class="panel"><h2>Conversation</h2>'+(d.messages.length?d.messages.map(m=>'<div class="step" style="margin-bottom:9px"><b>'+E(m.author)+'</b><small class="muted"> · '+fmt(m.created_at)+'</small><p style="white-space:pre-wrap">'+E(m.body)+'</p></div>').join(''):'<div class="empty">No replies yet</div>')+'</div>'+
  '<form id="ticket-reply" data-id="'+E(id)+'" class="panel"><h2>Record Reply</h2>'+formFields([['Message (saved internally, not sent)','body','textarea','']])+'<div class="form-actions"><button class="btn">Add Reply</button></div></form>';
 }
-async function report(kind){const q=await api(apiBase+'deep/reports/'+kind);const keys=kind==='transactions'?['event_id','round_id','game','stake','payout','currency','occurred_at']:kind==='logins'?['username','success','ip','created_at']:kind==='notifications'?['recipient_ref','title','channel','status','created_at']:['source','target','amount'];
+async function report(kind,filter){const f=['win','loss','draw'].includes(filter)?filter:'all';const q=await api(apiBase+'deep/reports/'+kind+(kind==='transactions'?'?result='+f:''));const keys=kind==='transactions'?['event_id','round_id','game','stake','payout','result','currency','occurred_at']:kind==='logins'?['username','success','ip','created_at']:kind==='notifications'?['recipient_ref','title','channel','status','created_at']:['source','target','amount'];
  return heading(kind==='transactions'?'Transaction History':kind==='logins'?'Login History':kind==='notifications'?'Notification History':'Transfer History','Reports, drill-down and export')+
- notice(q.notice,kind==='transfers'?'warn':'')+
+ notice(q.notice,kind==='transfers'||kind==='transactions'?'warn':'')+
+ (kind==='transactions'?'<div class="tabs"><button class="btn ghost" data-go="report/transactions">All</button><button class="btn ghost" data-go="report/transactions/win">Net Win</button><button class="btn ghost" data-go="report/transactions/loss">Net Loss</button><button class="btn ghost" data-go="report/transactions/draw">Draw</button></div>':'')+
  '<div class="toolbar"><button class="btn ghost" data-action="export">Download visible CSV</button></div>'+
  table(keys.map(x=>x.replaceAll('_',' ')),q.items.map(x=>keys.map(k=>k==='round_id'?link(x[k],'round/'+x.id):E(x[k]))));
 }
@@ -251,6 +252,63 @@ function safeInstructions(value){
  }).join('');
 }
 
+
+function eventRoute(action,resource){
+ if(typeof resource!=='string')return null;
+ if(action.startsWith('game.'))return 'game/'+resource;
+ if(action.startsWith('ticket.'))return 'ticket/'+resource;
+ if(action.startsWith('player.')||action.startsWith('virtual_wallet.'))return 'player/'+resource;
+ if(action==='settings.saved')return 'setting/'+resource;
+ if(action.startsWith('content.'))return 'content/page';
+ if(action.startsWith('subscriber.'))return 'subscribers';
+ if(action.startsWith('request.'))return 'diamonds/all';
+ return null;
+}
+async function refreshNotificationBadge(){
+ const el=$('#notif-count');if(!el)return;
+ try{const d=await api(apiBase+'ops/notifications?limit=5');
+  if(!document.contains(el))return;
+  const count=Number(d.unread||0);
+  el.hidden=count<=0;el.textContent=count>99?'99+':String(count);
+ }catch{if(document.contains(el))el.hidden=true}
+}
+async function activity(){
+ const d=await api(apiBase+'ops/notifications?limit=80');
+ return heading('Notification Center','Real local administrator activity, with per-account read receipts')+
+ notice(d.note,'warn')+
+ '<div class="toolbar"><span class="pill '+(d.unread?'warning':'good')+'">'+n(d.unread)+' unread</span>'+
+ '<button class="btn" data-action="activity-read-all">Mark All Read</button><button class="btn ghost" data-action="refresh">Refresh</button></div>'+
+ table(['Time','Activity','By','Record','Status','Action'],d.items.map(x=>{
+  const dest=eventRoute(x.action,x.resource);
+  return [fmt(x.created_at),E(x.action.replaceAll('.',' ')),E(x.actor),dest?link(x.resource,dest):E(x.resource),
+   badge(x.is_read?'Read':'Unread'),x.is_read?E('Read'):'<button class="btn ghost" data-action="activity-read" data-id="'+E(x.id)+'">Mark Read</button>'];
+ }));
+}
+async function profile(){
+ const d=await api(apiBase+'ops/profile'),p=d.item;
+ return heading('Administrator Profile','Account identity and own display name, separate from password security')+
+ '<div class="panel"><h2>Account</h2><div class="status-line">'+
+ badge(p.role)+' '+badge(p.status)+' '+badge(p.mfaEnabled?'MFA Enabled':'MFA Not Enabled')+' <span class="muted">Username: '+E(p.username)+'</span></div></div>'+
+ '<form id="profile-save" class="panel"><h2>Profile Details</h2>'+formFields([['Display Name','displayName','text',p.displayName]])+
+ '<div class="form-actions"><button class="btn" type="submit">Save Profile</button>'+
+ '<a class="btn ghost" href="/security">Change Password / MFA</a></div></form>'+
+ notice('Username and role are controlled by the Security Center. Avatar upload and game-user impersonation are not available.');
+}
+async function cron(){
+ const d=await api(apiBase+'ops/cron');
+ return heading('Cron Setup','Internal job and execution audit, not the Xaxino vendor cron endpoint','dashboard',
+ '<button class="btn ghost" data-go="setting/cron">Configure Schedule</button>')+
+ notice(d.note,'warn')+
+ '<div class="stats">'+metric('Job Enabled',d.enabled?'Yes':'No','◷')+
+ metric('Interval',d.intervalMinutes+' min','◷')+
+ metric('Last Run',d.lastRun?fmt(d.lastRun.started_at):'Never','◷')+
+ metric('Last Result',d.lastRun?.status||'Not run','◷')+'</div>'+
+ '<div class="panel"><h2>Safe Local Maintenance</h2><p>Deletes expired session records only. It never touches active accounts, game rounds, external wallets or settlements.</p>'+
+ '<div class="toolbar"><button class="btn" data-action="cron-run">Run Manually</button><button class="btn ghost" data-go="setting/cron">Cron Job Setting</button></div></div>'+
+ table(['Run Time','Actor','Status','Expired Revocations','Expired Sessions'],
+ d.history.map(x=>[fmt(x.started_at),E(x.actor),badge(x.status),n(x.cleaned_revocations),n(x.cleaned_sessions)]));
+}
+
 async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts[2];
  if(a==='dashboard')return dashboard();
  if(a==='wallet')return wallet(b);
@@ -267,7 +325,10 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  if(a==='request')return request(b);
  if(a==='tickets')return tickets(b||'all');
  if(a==='ticket')return ticket(b);
- if(a==='report')return report(b);
+ if(a==='report')return report(b,c);
+ if(a==='activity')return activity();
+ if(a==='cron')return cron();
+ if(a==='profile')return profile();
  if(a==='subscribers')return subscribers();
  if(a==='notify')return notify();
  if(a==='settings')return settingsHub();
@@ -279,11 +340,37 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  return heading('Not found','This route has not been implemented','dashboard');
 }
 async function render(){route=getRoute();const current=++renderSequence;$('#app').innerHTML=shell('<div class="loading">Loading '+E(route)+'…</div>');
- try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);if(route.startsWith('game/'))attachInstructionEditor();if(route==='parity'){const apply=()=>{const q=($('#parity-search')?.value||'').toLowerCase(),status=$('#parity-status')?.value||'';document.querySelectorAll('.parity-row').forEach(tr=>{tr.hidden=!!((status&&tr.dataset.status!==status)||(q&&!tr.dataset.search.includes(q)))})};$('#parity-search')?.addEventListener('input',apply);$('#parity-status')?.addEventListener('change',apply)}if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
+ try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);void refreshNotificationBadge();if(route.startsWith('game/'))attachInstructionEditor();if(route==='parity'){const apply=()=>{const q=($('#parity-search')?.value||'').toLowerCase(),status=$('#parity-status')?.value||'';document.querySelectorAll('.parity-row').forEach(tr=>{tr.hidden=!!((status&&tr.dataset.status!==status)||(q&&!tr.dataset.search.includes(q)))})};$('#parity-search')?.addEventListener('input',apply);$('#parity-status')?.addEventListener('change',apply)}if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
  catch(e){if(current!==renderSequence)return;$('#app').innerHTML=shell(heading('Load failed',e.message,'dashboard')+notice('Endpoint may be unavailable. Use Refresh after checking Railway logs.','warn'));console.error(e)}}
 function modal(title,fields,action){document.querySelector('.modal-screen')?.remove();const el=document.createElement('div');el.className='modal-screen';el.innerHTML='<div class="modal"><h2>'+E(title)+'</h2><form id="modal-form" data-kind="'+E(action)+'">'+formFields(fields)+'<div class="form-actions"><button type="button" class="btn ghost" data-action="close">Cancel</button><button class="btn">Save</button></div></form></div>';document.body.appendChild(el)}
-function allRoutes(){return sidebar.flatMap(g=>[[g[1],g[0]],...g[2]]).concat(settingItems.map(x=>['setting/'+x[0],x[1]]))}
-function search(){const el=document.createElement('div');el.className='modal-screen';el.innerHTML='<div class="global-search"><div class="toolbar"><input id="global-query" autofocus placeholder="Search page names..."><button class="btn ghost control-close" data-action="close">✕</button></div><div id="global-results"></div></div>';document.body.appendChild(el);const input=$('#global-query');input.focus();input.addEventListener('input',()=>{$('#global-results').innerHTML=allRoutes().filter(x=>x[1].toLowerCase().includes(input.value.toLowerCase())).slice(0,15).map(([r,t])=>'<button class="result" data-go="'+E(r)+'">'+E(t)+'</button>').join('')});input.dispatchEvent(new Event('input'))}
+function allRoutes(){return sidebar.flatMap(g=>[[g[1],g[0]],...g[2]]).concat(settingItems.map(x=>['setting/'+x[0],x[1]])).concat([['activity','Notification Center'],['cron','Cron Setup'],['profile','Admin Profile'],['report/transactions/win','Net Win History'],['report/transactions/loss','Net Loss History']])}
+function search(){
+ document.querySelector('.modal-screen')?.remove();
+ const el=document.createElement('div');el.className='modal-screen';
+ el.innerHTML='<div class="global-search"><div class="toolbar"><input id="global-query" autofocus placeholder="Search menus, games, players, tickets, content..." aria-label="Global search"><button class="btn ghost control-close" data-action="close">✕</button></div><div id="global-results" role="listbox"></div></div>';
+ document.body.appendChild(el);
+ const input=$('#global-query');let seq=0;
+ const renderResults=async()=>{
+  const current=++seq,q=input.value.trim();
+  const local=allRoutes().filter(x=>x[1].toLowerCase().includes(q.toLowerCase())).slice(0,9).map(([r,t])=>({route:r,label:t,type:'Menu',subtitle:'Navigation'}));
+  let remote=[];
+  if(q.length>=2 && q.length<=80)try{
+    const data=await api(apiBase+'ops/search?q='+encodeURIComponent(q));if(current!==seq)return;remote=data.items||[];
+  }catch(e){if(current!==seq)return}
+  if(current!==seq || !document.contains(el))return;
+  const rows=[...local,...remote].slice(0,24);
+  $('#global-results').innerHTML=rows.map(x=>'<button class="result" data-go="'+E(x.route)+'"><strong>'+E(x.label)+'</strong><small>'+E(x.type)+' · '+E(x.subtitle||'')+'</small></button>').join('')||'<p class="empty-search">No matching records. Search uses local records only.</p>';
+ };
+ input.addEventListener('input',renderResults);
+ input.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){const button=$('#global-results .result');if(button){e.preventDefault();button.focus()}}
+ });
+ el.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'&&e.target.classList.contains('result')){e.preventDefault();(e.target.nextElementSibling||input).focus();}
+  if(e.key==='ArrowUp'&&e.target.classList.contains('result')){e.preventDefault();(e.target.previousElementSibling||input).focus();}
+ });
+ input.focus();void renderResults();
+}
 async function toImage(file){if(!file)return null;if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Only PNG/JPEG/WebP accepted');const bmp=await createImageBitmap(file);const canvas=document.createElement('canvas');let scale=Math.min(1,900/Math.max(bmp.width,bmp.height));canvas.width=Math.round(bmp.width*scale);canvas.height=Math.round(bmp.height*scale);canvas.getContext('2d').drawImage(bmp,0,0,canvas.width,canvas.height);let data=canvas.toDataURL('image/jpeg',.8);if(data.length>680000)data=canvas.toDataURL('image/jpeg',.55);if(data.length>680000)throw Error('Image too large after compression');return data}
 document.addEventListener('click',async e=>{
  const goBtn=e.target.closest('[data-go]');if(goBtn){document.querySelector('.modal-screen')?.remove();go(goBtn.dataset.go);return}
@@ -302,6 +389,9 @@ document.addEventListener('click',async e=>{
   if(a==='mobile'){mobile=!mobile;return render()}
   if(a==='close'){document.querySelector('.modal-screen')?.remove();return}
   if(a==='refresh')return render();
+  if(a==='activity-read'){await api(apiBase+'ops/notifications/'+btn.dataset.id+'/read','POST',{});toast('Notification marked as read');return render()}
+  if(a==='activity-read-all'){await api(apiBase+'ops/notifications/read-all','POST',{});toast('All visible activity marked as read');return render()}
+  if(a==='cron-run'){const d=await api(apiBase+'ops/cron/run','POST',{});toast('Maintenance completed · '+n(d.run?.cleaned_sessions||0)+' expired sessions cleaned');return render()}
   if(a==='logout'){await api('/api/auth/logout','POST');location.replace('/login');return}
   if(['wallet-credit','wallet-debit','wallet-transfer'].includes(a)){
     const fields=[['Amount (DEMO_COIN)','amount','number','100'],['Reason (minimum 5 characters)','note','text','Internal development adjustment']];
@@ -319,10 +409,11 @@ document.addEventListener('click',async e=>{
  }catch(err){toast('Error: '+err.message)}
 });
 document.addEventListener('submit',async e=>{
- const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form'].includes(form.id))return;
+ const form=e.target;if(!['game-edit','player-edit','ticket-reply','setting-save','notification-create','content-edit','modal-form','profile-save'].includes(form.id))return;
  e.preventDefault();
  try{
   const v=formValues(form);
+  if(form.id==='profile-save'){await api(apiBase+'ops/profile','PUT',{displayName:String(v.displayName||'')});toast('Profile updated and audited');return render()}
   if(form.id==='game-edit'){const id=form.dataset.id;const r=await api(apiBase+'deep/games/'+id,'PUT',v);if(queuedImage){await api(apiBase+'deep/games/'+id+'/image','POST',{data:await toImage(queuedImage)});queuedImage=null}toast('Version '+r.version+' saved · live engine unchanged');return render()}
   if(form.id==='player-edit'){const r=await api(apiBase+'deep/players/'+form.dataset.id,'PUT',v);toast('Profile metadata saved · version '+r.version);return render()}
   if(form.id==='ticket-reply'){await api(apiBase+'deep/tickets/'+form.dataset.id+'/replies','POST',v);toast('Reply recorded internally');return render()}

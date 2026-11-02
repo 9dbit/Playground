@@ -65,9 +65,12 @@ const settings=[
 ['Robots txt','robots','implemented','Served as text/plain with configured rules.']
 ];
 const specials=[
-['Dashboard','Global search','dashboard','partial','Searches known navigation labels only, not records.'],
-['Dashboard','Admin notifications','notify','partial','Internal record only; read/unread actions incomplete.'],
+['Dashboard','Global search','dashboard','partial','Navigation and database record search active; source game user records may be incomplete.'],
+['Dashboard','Admin notifications','activity','partial','Per-admin read/unread is active for audited local events, not real member-registration messages.'],
 ['Dashboard','Login by browser, OS, country','dashboard','blocked','Game player login analytics not connected.'],
+['Dashboard','Cron Setup and run manually','cron','partial','Run history and owner-only safe session cleanup; automatic execution requires explicit enabled setting.'],
+['Dashboard','Profile and Password','profile','partial','Admin display name is editable and Security Center handles passwords; avatar upload not connected.'],
+['Dashboard','Game Log Win/Loss Filters','report/transactions/win','partial','Derives net result from observed stake versus payout; not vendor win_status.'],
 ['Manage Games','Demo winning configuration','games','partial','Sandbox-only metadata; never alters a real settled round.'],
 ['Manage Users','Virtual Balance and Ledger','players/all','partial','Internal, audited DEMO_COIN balance only; no game wallet synchronization.'],
 ['Manage Users','Balance credit and debit','players/all','partial','Owner-only, idempotent DEMO_COIN adjustment with reason and audit.'],
@@ -104,7 +107,7 @@ function mount(app,{pool}){
    const service={database:'connected',adminAccounts:!!schema.admin_accounts,gameProfiles:!!schema.game_profiles,
     virtualWallet:!!schema.wallets&&!!schema.wallet_entries&&!!schema.wallet_operations,
     externalGameWallet:false,playerIdentityProvider:false,kycProvider:false,paymentProvider:false};
-   res.json({version:'checkpoint-10',reference:'Xaxino v4.0 admin demo, screenshots and existing navigation inventory',
+   res.json({version:'checkpoint-11',reference:'Xaxino v4.0 admin demo, screenshots and existing navigation inventory',
     verifiedVendorDeepLinks:5,assessment:'Source-backed capability inventory, not proof of end-to-end parity with all vendor pages',
     items,counts,service,asOf:new Date().toISOString()});
   }catch(e){next(e)}

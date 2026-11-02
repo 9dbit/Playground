@@ -151,7 +151,10 @@ function mount(app,{pool,audit}){
  }));
  app.get('/api/admin/deep/reports/:kind',wrap(async(req,res)=>{
   let q,notice;
-  if(req.params.kind==='transactions'){q=await pool.query('SELECT e.id::text,e.event_id,e.round_id,g.name AS game,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id ORDER BY e.id DESC LIMIT 200');notice='Virtual event log, not monetary transactions'}
+  if(req.params.kind==='transactions'){const result=req.query.result||'all';
+   if(!['all','win','loss','draw'].includes(result))return fail(res,400,'Unknown round result filter');
+   q=await pool.query("SELECT e.id::text,e.event_id,e.round_id,g.name AS game,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at,CASE WHEN e.payout>e.stake THEN 'win' WHEN e.payout<e.stake THEN 'loss' ELSE 'draw' END AS result FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id WHERE ($1='all' OR ($1='win' AND e.payout>e.stake) OR ($1='loss' AND e.payout<e.stake) OR ($1='draw' AND e.payout=e.stake)) ORDER BY e.id DESC LIMIT 200",[result]);
+   notice='Derived net result from observed stake/payout only; not proof of Xaxino win_status or final game settlement';}
   else if(req.params.kind==='logins'){q=await pool.query('SELECT id::text,username,success,ip,created_at FROM gameops_login_history ORDER BY id DESC LIMIT 200');notice='Admin login history only'}
   else if(req.params.kind==='notifications'){q=await pool.query('SELECT id::text,recipient_ref,title,channel,status,created_at FROM gameops_notifications ORDER BY id DESC LIMIT 200');notice='Internal records, not delivered'}
   else if(req.params.kind==='transfers'){q=await pool.query("SELECT id::text,source_player_id::text AS source,target_player_id::text AS target,amount::text,actor,note,created_at FROM gameops_virtual_wallet_operations WHERE action='transfer' ORDER BY created_at DESC LIMIT 200");notice='Internal DEMO_COIN transfers only; no external wallet settlement'}

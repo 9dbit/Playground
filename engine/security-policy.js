@@ -1,6 +1,13 @@
 'use strict';
 // Deny by default. Both original and deep APIs are covered; the UI is not an authorization boundary.
 const rules = [
+  ['GET', /^\/ops\/search\/?$/, ['owner','operator','support','viewer']],
+  ['GET', /^\/ops\/notifications\/?$/, ['owner','operator','support','viewer']],
+  ['POST', /^\/ops\/notifications\/(?:[1-9][0-9]{0,17}\/read|read-all)\/?$/, ['owner','operator','support','viewer']],
+  ['GET', /^\/ops\/profile\/?$/, ['owner','operator','support','viewer']],
+  ['PUT', /^\/ops\/profile\/?$/, ['owner','operator','support','viewer']],
+  ['GET', /^\/ops\/cron\/?$/, ['owner','operator','support','viewer']],
+  ['POST', /^\/ops\/cron\/run\/?$/, ['owner']],
   ['GET', /^\/parity\/?$/, ['owner','operator','support','viewer']],
   ['GET', /^\/virtual-wallets\/[0-9a-f-]{36}\/?$/, ['owner','operator','support']],
   ['POST', /^\/virtual-wallets\/[0-9a-f-]{36}\/(?:adjust|transfer)\/?$/, ['owner']],
