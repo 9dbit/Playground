@@ -6,12 +6,14 @@ const path = require('node:path');
 const deep = require('./engine/deep-routes');
 const { createSecurity } = require('./engine/security');
 const { createBridge } = require('./engine/game-bridge');
+const virtualWallet=require('./engine/virtual-wallet');
+const parity=require('./engine/parity');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -90,7 +92,7 @@ CREATE INDEX IF NOT EXISTS gameops_audit_time_idx ON gameops_audit(created_at DE
 CREATE INDEX IF NOT EXISTS gameops_players_last_seen_idx ON gameops_players(last_seen DESC);
 `;
 async function initDB() {
-  await pool.query(ddl); await deep.ensureSchema(pool); await security.init();
+  await pool.query(ddl); await deep.ensureSchema(pool); await virtualWallet.ensureSchema(pool); await security.init();
   for (const [name, slug, code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]) {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
@@ -107,7 +109,7 @@ app.get('/integrations', security.protectedPage('bridge.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
 for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
-for (const filename of ['control.css','engine.css','bridge.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['control.css','parity.css','engine.css','bridge.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([
@@ -200,6 +202,8 @@ app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_IN
 app.use('/api/v2/game-bridge',(req,res,next)=>{if(!limit('bridge:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
 bridge.mount(app);
 deep.mount(app,{pool,audit});
+virtualWallet.mount(app,{pool,currentActor:security.currentActor});
+parity.mount(app,{pool});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
 app.use(security.errorHandler);

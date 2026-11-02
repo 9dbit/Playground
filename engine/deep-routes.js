@@ -154,9 +154,9 @@ function mount(app,{pool,audit}){
   if(req.params.kind==='transactions'){q=await pool.query('SELECT e.id::text,e.event_id,e.round_id,g.name AS game,e.player_ref,e.stake::text,e.payout::text,e.currency,e.occurred_at FROM gameops_events e JOIN gameops_games g ON g.id=e.game_id ORDER BY e.id DESC LIMIT 200');notice='Virtual event log, not monetary transactions'}
   else if(req.params.kind==='logins'){q=await pool.query('SELECT id::text,username,success,ip,created_at FROM gameops_login_history ORDER BY id DESC LIMIT 200');notice='Admin login history only'}
   else if(req.params.kind==='notifications'){q=await pool.query('SELECT id::text,recipient_ref,title,channel,status,created_at FROM gameops_notifications ORDER BY id DESC LIMIT 200');notice='Internal records, not delivered'}
-  else if(req.params.kind==='transfers'){q={rows:[]};notice='Transfers disabled until audited wallet ledger is available'}
+  else if(req.params.kind==='transfers'){q=await pool.query("SELECT id::text,source_player_id::text AS source,target_player_id::text AS target,amount::text,actor,note,created_at FROM gameops_virtual_wallet_operations WHERE action='transfer' ORDER BY created_at DESC LIMIT 200");notice='Internal DEMO_COIN transfers only; no external wallet settlement'}
   else return fail(res,404,'Report unknown');
-  res.json({items:q.rows,notice,connected:req.params.kind!=='transfers'});
+  res.json({items:q.rows,notice,connected:true,externalWalletConnected:false});
  }));
  app.post('/api/admin/deep/notifications',wrap(async(req,res)=>{
   const p=req.body||{};
