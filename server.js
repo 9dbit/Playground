@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -20,7 +20,8 @@ const pool = new Pool({ connectionString: DATABASE_URL, max: 8, idleTimeoutMilli
 const security = createSecurity({ pool, master: SESSION_SECRET,
   bootstrapUser: process.env.ADMIN_USERNAME, bootstrapPassword: process.env.ADMIN_PASSWORD,
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
-  production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
+  production: PRODUCTION, publicDir: path.join(__dirname, 'public'),
+  developmentAccess: { enabled: process.env.DEV_ACCESS_ENABLED === 'true', keyHash: process.env.DEV_ACCESS_KEY_SHA256, expiresAt: process.env.DEV_ACCESS_EXPIRES_AT } });
 const bridge = createBridge({ pool });
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
@@ -189,11 +190,11 @@ app.put('/api/admin/settings/:key',route(async(req,res)=>{
 }));
 app.get('/api/admin/system',route(async(req,res)=>{
  const db=await pool.query("SELECT current_setting('server_version') AS version,now() AS time");
- res.json({app:'Playground GameOps',appVersion:VERSION,dbConnected:true,postgresVersion:db.rows[0].version,serverTime:db.rows[0].time,auth:'database-sessions',eventIntegration:'HMAC SHA-256',walletSettlement:false,mfa:req.auth.mfa_enabled,rbac:true});
+ res.json({app:'Playground GameOps',appVersion:VERSION,dbConnected:true,postgresVersion:db.rows[0].version,serverTime:db.rows[0].time,auth:req.auth.development?'development-link':'database-sessions',development:req.auth.development===true,eventIntegration:'HMAC SHA-256',walletSettlement:false,mfa:req.auth.mfa_enabled,rbac:true});
 }));
 app.get('/api/admin/deep/system/:name',route(async(req,res)=>{
  if(!['server','application','cache','update','cron','security'].includes(req.params.name))return error(res,404,'Unknown module');
- res.json({name:req.params.name,readOnly:true,asOf:iso(),appVersion:VERSION,mfaEnabled:req.auth.mfa_enabled,mfaRequired:true,rbacEnabled:true,role:req.auth.role,gameControlConnected:false,message:'Security Center is active. Infrastructure maintenance and game adapters remain disconnected.'});
+ res.json({name:req.params.name,readOnly:true,asOf:iso(),appVersion:VERSION,mfaEnabled:req.auth.mfa_enabled,mfaRequired:!req.auth.development,development:req.auth.development===true,rbacEnabled:true,role:req.auth.role,gameControlConnected:false,message:req.auth.development?'Development link access is active. Account security requires an enrolled owner.':'Security Center is active. Infrastructure maintenance and game adapters remain disconnected.'});
 }));
 // CP08 shared-key ingestion is retired. New integrations have immutable per-game scopes.
 app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_INGESTION_RETIRED',endpoint:'/api/v2/game-bridge'}));
@@ -214,3 +215,4 @@ initDB().then(()=>{
  const stop=()=>{server.close(()=>pool.end().then(()=>process.exit(0)));setTimeout(()=>process.exit(1),10000).unref();};
  process.once('SIGTERM',stop);process.once('SIGINT',stop);
 }).catch(e=>{console.error('Database startup failed:',e.code||e.message);process.exit(1);});
+

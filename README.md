@@ -1,6 +1,6 @@
 # Playground GameOps Control Center
 
-Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. Current release: **0.8.0 / Checkpoint 08**.
+Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. Current release: **0.9.1 / development access**.
 
 ## Application
 - Login: https://playground-admin-production.up.railway.app/login
@@ -25,6 +25,10 @@ The environment username/password only seed the first owner when the account tab
 - Signed inbound DEMO_COIN events; **no external game adapter or wallet settlement is connected**
 
 ## Development and testing
+For convenient development access, an explicitly enabled private link at `/development#key=...` exchanges a random 32-byte key for a development session and opens the dashboard without a login form or MFA enrollment. The URL fragment is removed immediately. Only its SHA-256 hash is configured on the server in `DEV_ACCESS_KEY_SHA256`, with `DEV_ACCESS_ENABLED=true` and an explicit ISO deadline in `DEV_ACCESS_EXPIRES_AT`. All three values must be valid. Do not put the raw link in source control, logs, or shared documentation.
+
+Development sessions have their own database table and audit identity (`development-admin`). They last up to seven days, capped by the configured deadline, without the normal 30-minute idle timeout. Reopen the private link after logout or session expiry. Disabling development access, expiring it, or changing its key invalidates existing development sessions once the new configuration is deployed. Passwords, MFA, recovery codes, and the real owner account are unchanged. Account-security administration still requires an enrolled owner; operational dashboard actions retain RBAC and CSRF checks.
+
 Configure `.env.example`, start PostgreSQL, then run:
 
 ```bash
@@ -47,3 +51,4 @@ Native TOTP is implemented; OIDC, passkeys, KYC, external notification delivery,
 ## Checkpoints
 - `sources/PLAYGROUND_CHECKPOINT_08.md`: security implementation, onboarding, acceptance coverage and remaining work.
 - `sources/PLAYGROUND_CHECKPOINT_07.md`: baseline deep-admin features and disconnected integrations.
+

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const C = require('./security-crypto');
 const policy = require('./security-policy');
+const { createDevelopmentAccess } = require('./development-access');
 const COOKIE = 'gameops_session';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,63}$/;
@@ -41,8 +42,9 @@ CREATE TABLE IF NOT EXISTS gameops_auth_buckets (
 );
 CREATE INDEX IF NOT EXISTS gameops_auth_buckets_expiry_idx ON gameops_auth_buckets(expires_at);
 `;
-function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, publicOrigin, production = false, publicDir }) {
+function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, publicOrigin, production = false, publicDir, developmentAccess = {} }) {
   const vault = C.encryption(master), actorContext = new AsyncLocalStorage();
+  const development = createDevelopmentAccess({ pool, config: developmentAccess });
   let dummyHash;
   const origin = new URL(publicOrigin).origin;
   const cookieOptions = { httpOnly: true, secure: production, sameSite: 'strict', path: '/', maxAge: 8 * 3600000 };
@@ -59,6 +61,7 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     await transaction(async db => {
       await db.query('SELECT pg_advisory_xact_lock(812083001)');
       await db.query(ddl);
+      await development.init(db);
       const exists = await db.query('SELECT 1 FROM gameops_admin_accounts LIMIT 1');
       if (!exists.rowCount) {
         const username = String(bootstrapUser || '').trim().toLowerCase();
@@ -86,13 +89,15 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
       FROM gameops_admin_sessions s JOIN gameops_admin_accounts a ON a.id=s.admin_id
       WHERE s.token_hash=$1 AND a.status='active' AND s.auth_version=a.auth_version
        AND s.expires_at>now() AND s.last_seen>now()-interval '30 minutes'`, [C.sha(raw)]);
-    if (!q.rowCount) return null;
+    if (!q.rowCount) return development.session(raw);
     const a = q.rows[0];
     await pool.query("UPDATE gameops_admin_sessions SET last_seen=now() WHERE id=$1 AND last_seen < now()-interval '1 minute'", [a.session_id]);
     return { ...a, raw };
   }
-  function full(a) { return !a.must_change_password && a.mfa_enabled && a.mfa_verified; }
-  function state(a) { return { ...publicAccount(a), username: a.username, csrf: csrf(a.raw), expiresAt: a.expires_at, sessionId: a.session_id, mfaVerified: a.mfa_verified, setupRequired: !full(a) }; }
+  function full(a) { return a.development === true || (!a.must_change_password && a.mfa_enabled && a.mfa_verified); }
+  function state(a) { return { ...publicAccount(a), username: a.username, csrf: csrf(a.raw), expiresAt: a.expires_at, sessionId: a.session_id, mfaVerified: a.mfa_verified, setupRequired: !full(a),
+    development: a.development === true, authenticationMethod: a.development ? 'development-link' : 'password-mfa',
+    ...(a.development ? { developmentExpiresAt: a.development_expires_at } : {}) }; }
   function checkOrigin(req) {
     const supplied = req.get('Origin');
     if ((supplied && supplied !== origin) || req.get('Sec-Fetch-Site') === 'cross-site') throw new AuthError(403, 'Cross-site request rejected', 'ORIGIN_REJECTED');
@@ -116,7 +121,10 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
       [account.id, C.sha(raw), account.auth_version, verified, String(req.ip || '').slice(0,64), String(req.get('User-Agent') || '').slice(0,300)]);
     return { ...account, raw, mfa_verified: verified, session_id: q.rows[0].id, expires_at: q.rows[0].expires_at };
   }
-  function sendSession(res, a, extra = {}) { res.cookie(COOKIE, a.raw, cookieOptions); res.json({ ...state(a), ...extra }); }
+  function sendSession(res, a, extra = {}) {
+    const options = a.development ? { ...cookieOptions, maxAge: Math.max(0, new Date(a.expires_at).getTime() - Date.now()) } : cookieOptions;
+    res.cookie(COOKIE, a.raw, options); res.json({ ...state(a), ...extra });
+  }
   async function factor(db, account, code) {
     if (!account.mfa_enabled) return false;
     const step = C.matchTotp(vault.open(account.mfa_secret, account.id), code, account.mfa_last_step);
@@ -151,7 +159,7 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     next();
   })];
   const owner = (req, res, next) => {
-    if (!full(req.auth) || req.auth.role !== 'owner') return next(new AuthError(403, 'Fully enrolled owner access required', 'FORBIDDEN'));
+    if (req.auth.development || !full(req.auth) || req.auth.role !== 'owner') return next(new AuthError(403, 'Fully enrolled owner access required', 'FORBIDDEN'));
     next();
   };
   const protectedPage = filename => wrap(async (req, res) => {
@@ -168,6 +176,11 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     return a;
   }
   function mount(app) {
+    app.get('/development', (req, res) => {
+      res.set('Cache-Control', 'no-store'); res.set('Referrer-Policy', 'no-referrer');
+      res.set('X-Robots-Tag', 'noindex, nofollow');
+      res.sendFile(path.join(publicDir, 'development.html'));
+    });
     app.get('/login', wrap(async (req, res) => {
       const a = await session(req); return a ? res.redirect(full(a) ? '/engine' : '/security') : res.sendFile(path.join(publicDir, 'login.html'));
     }));
@@ -176,9 +189,21 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
       res.sendFile(path.join(publicDir, 'security.html'));
     }));
     app.get('/logout', (req, res) => res.redirect('/security')); // GET cannot revoke sessions.
-    for (const filename of ['login.js','security-ui.js','security.css','security-nav.js']) {
+    for (const filename of ['login.js','security-ui.js','security.css','security-nav.js','development.js']) {
       app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(publicDir, filename)));
     }
+    app.post('/api/auth/development', wrap(async (req, res) => {
+      checkOrigin(req); if (!req.is('application/json')) throw new AuthError(415, 'JSON request required');
+      if (!development.active()) throw new AuthError(404, 'Development access is not enabled or has expired', 'DEVELOPMENT_UNAVAILABLE');
+      await throttle('development-ip:' + req.ip, 20);
+      if (!development.accepts(req.body?.key)) throw new AuthError(401, 'This development access link is invalid', 'INVALID_DEVELOPMENT_KEY');
+      const a = await transaction(async db => {
+        const created = await development.issue(db, req);
+        await audit(db, created.username, 'security.development.login', created.session_id, { authenticationMethod: 'development-link', expiresAt: created.expires_at });
+        return created;
+      });
+      sendSession(res, a);
+    }));
     app.post('/api/auth/login', wrap(async (req, res) => {
       checkOrigin(req); if (!req.is('application/json')) throw new AuthError(415, 'JSON request required');
       const username = String(req.body?.username || '').trim().toLowerCase();
@@ -206,20 +231,37 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     app.get('/api/auth/session', authenticated, (req, res) => res.json(state(req.auth)));
     app.post('/api/auth/logout', authenticated, wrap(async (req, res) => {
       await transaction(async db => {
-        await db.query('DELETE FROM gameops_admin_sessions WHERE id=$1 AND admin_id=$2', [req.auth.session_id, req.auth.id]);
+        if (req.auth.development) await db.query('DELETE FROM gameops_development_sessions WHERE id=$1', [req.auth.session_id]);
+        else await db.query('DELETE FROM gameops_admin_sessions WHERE id=$1 AND admin_id=$2', [req.auth.session_id, req.auth.id]);
         await audit(db, req.auth.username, 'security.logout', req.auth.session_id);
       });
       res.clearCookie(COOKIE, { ...cookieOptions, maxAge: undefined }); res.json({ ok: true });
     }));
     app.use('/api/security', authenticated);
+    app.use('/api/security', (req, res, next) => {
+      const allowed = (['GET', 'HEAD'].includes(req.method) && /^\/(?:me|sessions)\/?$/.test(req.path)) || (req.method === 'POST' && /^\/sessions\/revoke\/?$/.test(req.path));
+      if (req.auth.development && !allowed) return next(new AuthError(403, 'Use an enrolled owner account to manage passwords, MFA or administrators', 'DEVELOPMENT_SCOPE'));
+      next();
+    });
     app.get('/api/security/me', (req, res) => res.json(state(req.auth)));
     app.get('/api/security/sessions', wrap(async (req, res) => {
+      if (req.auth.development) {
+        const q = await pool.query('SELECT id,created_at,last_seen,expires_at,ip,user_agent FROM gameops_development_sessions WHERE id=$1 AND expires_at>now()', [req.auth.session_id]);
+        return res.json({ items: q.rows.map(s => ({ ...s, current: true })) });
+      }
       const q = await pool.query("SELECT id,created_at,last_seen,expires_at,ip,user_agent FROM gameops_admin_sessions WHERE admin_id=$1 AND expires_at>now() AND last_seen>now()-interval '30 minutes' ORDER BY created_at DESC LIMIT 100", [req.auth.id]);
       res.json({ items: q.rows.map(s => ({ ...s, current: s.id === req.auth.session_id })) });
     }));
     app.post('/api/security/sessions/revoke', wrap(async (req, res) => {
       const sid = req.body.session_id;
       if (!UUID.test(sid || '')) throw new AuthError(400, 'Invalid session');
+      if (req.auth.development) {
+        if (sid !== req.auth.session_id) throw new AuthError(403, 'Only the current development session can be revoked', 'DEVELOPMENT_SCOPE');
+        await pool.query('DELETE FROM gameops_development_sessions WHERE id=$1', [sid]);
+        await audit(pool, req.auth.username, 'security.development.session.revoked', sid);
+        res.clearCookie(COOKIE, { ...cookieOptions, maxAge: undefined });
+        return res.json({ ok: true, signedOut: true });
+      }
       const q = await pool.query('DELETE FROM gameops_admin_sessions WHERE id=$1 AND admin_id=$2 RETURNING id', [sid, req.auth.id]);
       if (!q.rowCount) throw new AuthError(404, 'Session not found');
       await audit(pool, req.auth.username, 'security.session.revoked', sid);
@@ -338,3 +380,4 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     currentActor: () => actorContext.getStore() || 'system', state };
 }
 module.exports = { createSecurity, AuthError, publicAccount };
+
