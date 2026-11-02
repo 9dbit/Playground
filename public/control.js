@@ -228,6 +228,29 @@ async function parity(){
  '</tbody></table></div></div>';
 }
 
+
+function attachInstructionEditor(){
+ const textarea=document.querySelector('#game-edit textarea[name="instructions"]');
+ if(!textarea||document.getElementById('instructions-toolbar'))return;
+ const toolbar=document.createElement('div');
+ toolbar.id='instructions-toolbar';toolbar.className='toolbar instruction-toolbar';
+ toolbar.innerHTML='<button class="btn ghost" type="button" data-action="fmt-bold" title="Bold">B</button>'+
+ '<button class="btn ghost" type="button" data-action="fmt-italic" title="Italic">I</button>'+
+ '<button class="btn ghost" type="button" data-action="fmt-heading" title="Heading">Heading</button>'+
+ '<button class="btn ghost" type="button" data-action="fmt-list" title="Bullet list">List</button>'+
+ '<button class="btn ghost" type="button" data-action="fmt-preview" title="Preview formatted instructions">Preview</button>';
+ const preview=document.createElement('div');preview.id='instructions-preview';preview.className='instruction-preview';preview.hidden=true;
+ textarea.before(toolbar);textarea.after(preview);
+}
+function safeInstructions(value){
+ const lines=E(value).split('\n');
+ return lines.map(line=>{
+  if(line.startsWith('## '))return '<h3>'+line.slice(3)+'</h3>';
+  if(line.startsWith('- '))return '<div>• '+line.slice(2)+'</div>';
+  return '<p>'+line.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\*([^*]+)\*/g,'<em>$1</em>')+'</p>';
+ }).join('');
+}
+
 async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts[2];
  if(a==='dashboard')return dashboard();
  if(a==='wallet')return wallet(b);
@@ -256,7 +279,7 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  return heading('Not found','This route has not been implemented','dashboard');
 }
 async function render(){route=getRoute();const current=++renderSequence;$('#app').innerHTML=shell('<div class="loading">Loading '+E(route)+'…</div>');
- try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);if(route==='parity'){const apply=()=>{const q=($('#parity-search')?.value||'').toLowerCase(),status=$('#parity-status')?.value||'';document.querySelectorAll('.parity-row').forEach(tr=>{tr.hidden=!!((status&&tr.dataset.status!==status)||(q&&!tr.dataset.search.includes(q)))})};$('#parity-search')?.addEventListener('input',apply);$('#parity-status')?.addEventListener('change',apply)}if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
+ try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);if(route.startsWith('game/'))attachInstructionEditor();if(route==='parity'){const apply=()=>{const q=($('#parity-search')?.value||'').toLowerCase(),status=$('#parity-status')?.value||'';document.querySelectorAll('.parity-row').forEach(tr=>{tr.hidden=!!((status&&tr.dataset.status!==status)||(q&&!tr.dataset.search.includes(q)))})};$('#parity-search')?.addEventListener('input',apply);$('#parity-status')?.addEventListener('change',apply)}if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
  catch(e){if(current!==renderSequence)return;$('#app').innerHTML=shell(heading('Load failed',e.message,'dashboard')+notice('Endpoint may be unavailable. Use Refresh after checking Railway logs.','warn'));console.error(e)}}
 function modal(title,fields,action){document.querySelector('.modal-screen')?.remove();const el=document.createElement('div');el.className='modal-screen';el.innerHTML='<div class="modal"><h2>'+E(title)+'</h2><form id="modal-form" data-kind="'+E(action)+'">'+formFields(fields)+'<div class="form-actions"><button type="button" class="btn ghost" data-action="close">Cancel</button><button class="btn">Save</button></div></form></div>';document.body.appendChild(el)}
 function allRoutes(){return sidebar.flatMap(g=>[[g[1],g[0]],...g[2]]).concat(settingItems.map(x=>['setting/'+x[0],x[1]]))}
@@ -268,6 +291,13 @@ document.addEventListener('click',async e=>{
  const btn=e.target.closest('[data-action]');if(!btn)return;
  const a=btn.dataset.action;
  try{
+  if(a.startsWith('fmt-')){
+    const field=document.querySelector('#game-edit textarea[name="instructions"]');if(!field)return;
+    if(a==='fmt-preview'){const preview=$('#instructions-preview');preview.hidden=!preview.hidden;if(!preview.hidden)preview.innerHTML=safeInstructions(field.value);return}
+    const start=field.selectionStart,end=field.selectionEnd,selection=field.value.slice(start,end)||'text';
+    const replacement=a==='fmt-bold'?'**'+selection+'**':a==='fmt-italic'?'*'+selection+'*':a==='fmt-heading'?'## '+selection:'- '+selection;
+    field.setRangeText(replacement,start,end,'select');field.focus();const preview=$('#instructions-preview');if(preview&&!preview.hidden)preview.innerHTML=safeInstructions(field.value);return;
+  }
   if(a==='search')return search();
   if(a==='mobile'){mobile=!mobile;return render()}
   if(a==='close'){document.querySelector('.modal-screen')?.remove();return}

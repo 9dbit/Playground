@@ -20,7 +20,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async route=>{
   const req=route.request(),u=new URL(req.url()),p=u.pathname;
-  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
+  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/parity.css':'parity.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
   if(files[p]){
    const file=files[p];return route.fulfill({status:200,contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'application/javascript',body:fs.readFileSync(path.join(root,file))});
   }
@@ -31,7 +31,7 @@ try{
   else if(p==='/api/admin/summary')data={rounds:2,stake:'150',payout:'70'};
   else if(p==='/api/admin/deep/summary')data={games:{total:1,active:0},players:{total:1},tickets:{total:0,open:0},subscribers:0,published:0};
   else if(p==='/api/admin/deep/games')data={items:[game]};
-  else if(p==='/api/admin/deep/games/'+gid){data={item:game}};
+  else if(p==='/api/admin/deep/games/'+gid){data={item:game}}
   else if(p==='/api/admin/deep/players/'+pid)data={item:player};
   else if(p==='/api/admin/deep/players?state=all')data={items:[player]};
   else if(p==='/api/admin/virtual-wallets/'+pid){

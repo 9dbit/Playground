@@ -1,0 +1,19 @@
+/* Checkpoint 10: original functional controls and QA visibility. */
+.parity-row[hidden]{display:none!important}
+.instruction-toolbar{margin:12px 0 4px;display:flex;gap:6px;flex-wrap:wrap}
+.instruction-toolbar .btn{padding:6px 12px;min-width:38px}
+.instruction-toolbar [data-action=fmt-bold]{font-weight:900}
+.instruction-toolbar [data-action=fmt-italic]{font-style:italic}
+.instruction-preview{border:1px solid #dce3ed;border-radius:8px;background:#f9fafc;padding:16px 18px;line-height:1.5;margin-top:12px;overflow-wrap:anywhere}
+.instruction-preview[hidden]{display:none}
+.instruction-preview p{margin:5px 0}.instruction-preview h3{margin:10px 0 6px}
+#game-edit textarea[name=instructions]{min-height:230px}
+#game-edit input[type=checkbox]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;height:33px;border:0;border-radius:5px;background:#d6242e;cursor:pointer;position:relative;outline-offset:4px}
+#game-edit input[type=checkbox]::before{content:"No";display:block;text-align:center;padding:9px 0;color:#fff;font-weight:700;font-size:12px}
+#game-edit input[type=checkbox]:checked{background:#1eac70}
+#game-edit input[type=checkbox]:checked::before{content:"Yes"}
+#game-edit input[type=checkbox]:focus-visible{outline:3px solid #4537f7}
+#setting-save .form-actions>.btn{flex:1}
+#setting-save .form-actions{width:100%}
+#game-edit .field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:720px){#game-edit .field-grid{grid-template-columns:1fr}.instruction-toolbar .btn{flex:1;min-width:50px}}

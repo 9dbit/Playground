@@ -109,7 +109,7 @@ app.get('/integrations', security.protectedPage('bridge.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
 for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
-for (const filename of ['control.css','engine.css','bridge.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['control.css','parity.css','engine.css','bridge.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([
