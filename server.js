@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.11.0';
+const VERSION = '0.12.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
