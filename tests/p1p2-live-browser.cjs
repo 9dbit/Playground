@@ -1,0 +1,117 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const sharp = require('sharp');
+const { chromium } = require('playwright');
+const { createFixture } = require('./helpers/full-server.cjs');
+(async () => {
+  const f = await createFixture('cp14-browser');
+  const browser = await chromium.launch({ headless: true });
+  const report = { type: 'Actual browser + server.js + PostgreSQL, no mocked APIs', result: 'RUNNING', checks: [], externalRequests: [], errors: [] };
+  const output = path.join(__dirname, '../test-results');
+  fs.mkdirSync(output, { recursive: true });
+  try {
+    const gid = (await f.pool.query("SELECT id FROM gameops_games WHERE slug='skygate-5000'")).rows[0].id;
+    const player = crypto.randomUUID();
+    await f.pool.query("INSERT INTO gameops_players(id,game_id,player_ref,last_seen) VALUES($1,$2,'older-blocked-ui',now()-interval '10 days')", [player, gid]);
+    await f.pool.query("INSERT INTO gameops_player_profiles(player_id,local_status) VALUES($1,'blocked_locally')", [player]);
+    await f.pool.query("INSERT INTO gameops_players(game_id,player_ref,last_seen) SELECT $1,'recent-user-'||n,now() FROM generate_series(1,205) n", [gid]);
+    for (let i = 1; i <= 57; i++) await f.pool.query('INSERT INTO gameops_events(event_id,game_id,round_id,player_ref,stake,payout,occurred_at) VALUES($1,$2,$3,$4,100,$5,now())', ['ui-event-' + i, gid, 'ui-round-' + i, 'older-blocked-ui', i % 2 ? 150 : 0]);
+    async function contextFor(role) {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      await context.addCookies([{ name: 'gameops_session', value: f.accounts.get(role).raw, url: f.base, httpOnly: true, sameSite: 'Strict' }]);
+      await context.route('**/*', async route => {
+        if (new URL(route.request().url()).origin !== f.base) { report.externalRequests.push(route.request().url()); return route.abort(); }
+        return route.continue();
+      });
+      context.on('page', page => { page.setDefaultTimeout(12000); page.on('pageerror', e => report.errors.push(e.message)); });
+      return context;
+    }
+    const context = await contextFor('owner'), a = await context.newPage(), b = await context.newPage();
+    await a.goto(f.base + '/engine#/setting/general'); await a.locator('#setting-save').waitFor();
+    await b.goto(f.base + '/engine#/setting/general'); await b.locator('#setting-save').waitFor();
+    await a.locator('[name=site_title]').fill('Owner tab A');
+    await b.locator('[name=site_title]').fill('Owner tab B unsaved');
+    await a.locator('#setting-save button[type=submit]').click(); await a.locator('#setting-save[data-version="1"]').waitFor();
+    await b.locator('#setting-save button[type=submit]').click(); await b.locator('#settings-errors').waitFor({ state: 'visible' });
+    assert.match(await b.locator('#settings-errors').innerText(), /another tab/);
+    assert.equal(await b.locator('[name=site_title]').inputValue(), 'Owner tab B unsaved');
+    assert.equal((await f.pool.query("SELECT value->>'site_title' AS title FROM gameops_settings WHERE key='general'")).rows[0].title, 'Owner tab A');
+    b.once('dialog', dialog => dialog.accept()); await b.locator('[data-action=settings-reload]').click();
+    await b.locator('#setting-save[data-version="1"]').waitFor();
+    assert.equal(await b.locator('[name=site_title]').inputValue(), 'Owner tab A');
+    await b.locator('[name=site_title]').fill('Owner tab B committed');
+    await b.locator('#setting-save button[type=submit]').click(); await b.locator('#setting-save[data-version="2"]').waitFor();
+    report.checks.push('F03 two real tabs: stale write is 409, unsaved text retained, explicit reload then save works');
+    await b.locator('[name=transfer_percent]').fill('101');
+    await b.locator('#setting-save button[type=submit]').click(); await b.locator('#settings-errors').waitFor({ state: 'visible' });
+    assert.equal(await b.locator('[name=transfer_percent]').getAttribute('aria-invalid'), 'true');
+    assert.equal(await b.locator('[name=transfer_percent]').inputValue(), '101');
+    assert.equal((await f.pool.query("SELECT version FROM gameops_settings WHERE key='general'")).rows[0].version, 2);
+    report.checks.push('F02 actual server validation is rendered next to the form without losing edits');
+    await a.goto(f.base + '/engine#/players/banned'); await a.locator('#player-filter').waitFor();
+    await a.locator('.table').getByText('older-blocked-ui', { exact: true }).waitFor();
+    assert.equal(await a.locator('.table tbody tr').count(), 1);
+    await a.goto(f.base + '/engine#/players/active'); await a.locator('#player-filter').waitFor();
+    assert.equal(await a.locator('.table tbody tr').count(), 25);
+    await a.locator('.paging-controls [data-go="players/active/2"]').click();
+    await a.locator('.paging-controls').getByText('Page 2 / 9', { exact: false }).waitFor();
+    await a.locator('#player-filter [name=q]').fill('recent-user-205');
+    await a.locator('#player-filter button[type=submit]').click();
+    await a.locator('.paging-controls').getByText('1 observed records', { exact: false }).waitFor();
+    assert.equal(await a.locator('.table tbody tr').count(), 1);
+    report.checks.push('F05 older banned player, active-page navigation and literal player search use real SQL');
+    await a.goto(f.base + '/engine#/game-rounds/' + gid + '/win/1');
+    await a.locator('#game-log-filter').waitFor();
+    assert.equal(await a.locator('.table tbody tr').count(), 25);
+    await a.locator('.paging-controls [data-go$="/win/2"]').click();
+    await a.locator('.paging-controls').getByText('Page 2 / 2', { exact: false }).waitFor();
+    assert.equal(await a.locator('.table tbody tr').count(), 4);
+    report.checks.push('F01 actual full-server Game Log filter and second page work, not a mocked route');
+    const ticket = (await f.request('/api/admin/tickets', 'POST', { subject: 'Browser support ticket', requester_ref: 'qa', priority: 'Medium' })).data.item;
+    const supportContext = await contextFor('support'), support = await supportContext.newPage();
+    await support.goto(f.base + '/engine#/ticket/' + ticket.id); await support.locator('#ticket-reply').waitFor();
+    await support.locator('#ticket-reply [name=body]').fill('Support browser reply');
+    await support.locator('#ticket-reply button').click();
+    await support.getByText('Support browser reply', { exact: true }).waitFor();
+    await support.getByText('fixture_support', { exact: true }).waitFor();
+    assert.equal((await f.pool.query('SELECT author FROM gameops_ticket_messages WHERE ticket_id=$1', [ticket.id])).rows[0].author, 'fixture_support');
+    report.checks.push('F06 Support browser reply displays its real authenticated author');
+    for (const kind of ['page', 'policy']) {
+      await a.goto(f.base + '/engine#/content-edit/' + kind + '/new'); await a.locator('#content-edit').waitFor();
+      await a.locator('#content-edit [name=title]').fill('UI ' + kind);
+      await a.locator('#content-edit [name=slug]').fill('same-ui-url');
+      await a.locator('#content-edit [name=body]').fill('Independent ' + kind + ' content');
+      await a.locator('#content-edit [name=status]').selectOption('published');
+      await a.locator('#content-edit button').click();
+      await a.locator('a[href="/info/' + kind + '/same-ui-url"]').waitFor();
+    }
+    const one = await f.request('/info/page/same-ui-url', 'GET', undefined, null);
+    const two = await f.request('/info/policy/same-ui-url', 'GET', undefined, null);
+    assert.ok(one.text.includes('Independent page content') && two.text.includes('Independent policy content'));
+    assert.equal((await f.request('/info/same-ui-url', 'GET', undefined, null)).status, 300);
+    report.checks.push('F07 CMS UI exposes distinct public links for same-slug Page and Policy');
+    await a.goto(f.base + '/engine#/game/' + gid); await a.locator('#game-edit').waitFor();
+    const image = await sharp({ create: { width: 100, height: 80, channels: 3, background: '#4a40d0' } }).png().toBuffer();
+    await a.locator('#game-image').setInputFiles({ name: 'artwork.png', mimeType: 'image/png', buffer: image });
+    await a.locator('#game-edit button[type=submit]').click();
+    await a.locator('#game-edit .image-preview img[src*="/api/admin/deep/games/"]').waitFor();
+    const uploaded = await f.request('/api/admin/deep/games/' + gid + '/image');
+    assert.match(uploaded.headers.get('content-type'), /image\/webp/);
+    assert.equal((await sharp(uploaded.bytes).metadata()).width, 100);
+    report.checks.push('F08 browser upload is decoded and normalized by the real backend');
+    await a.screenshot({ path: path.join(output, 'cp14-real-server-desktop.png'), fullPage: true });
+    await a.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await a.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await a.screenshot({ path: path.join(output, 'cp14-real-server-mobile.png'), fullPage: true });
+    report.checks.push('390px mobile viewport has no horizontal page overflow');
+    assert.deepEqual(report.errors, []); assert.deepEqual(report.externalRequests, []);
+    report.result = 'PASS';
+  } finally {
+    fs.writeFileSync(path.join(output, 'cp14-real-browser.json'), JSON.stringify(report, null, 2));
+    await browser.close(); await f.close();
+  }
+  console.log(JSON.stringify(report));
+})().catch(e => { console.error(e); process.exitCode = 1; });
