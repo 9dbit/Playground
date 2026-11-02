@@ -1,0 +1,73 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const wallet=require('../engine/virtual-wallet');
+const {canAccess}=require('../engine/security-policy');
+const valid=(n=1)=>({amount:n,note:'Functional QA synthetic adjustment',idempotency_key:crypto.randomUUID()});
+test('wallet RBAC denies non-owner changes and permits authorized reads',()=>{
+ assert.equal(canAccess('owner','POST','/virtual-wallets/10000000-0000-4000-8000-000000000001/adjust'),true);
+ assert.equal(canAccess('operator','POST','/virtual-wallets/10000000-0000-4000-8000-000000000001/adjust'),false);
+ assert.equal(canAccess('support','POST','/virtual-wallets/10000000-0000-4000-8000-000000000001/transfer'),false);
+ assert.equal(canAccess('viewer','GET','/virtual-ledger'),false);
+ assert.equal(canAccess('owner','GET','/parity'),true);
+});
+test('wallet amount, reason and idempotency validation',()=>{
+ for(const n of [0,-1,1.5,1000000001,'100',NaN,Infinity])assert.equal(wallet.readInput({...valid(),amount:n},false),null);
+ assert.equal(wallet.readInput({...valid(),note:'bad'},false),null);
+ assert.equal(wallet.readInput({...valid(),idempotency_key:'admin'},false),null);
+ assert.equal(wallet.readInput(valid(120),false).amount,120n);
+});
+test('wallet PostgreSQL integration: transfer is conserved, attempts are idempotent', {skip:!process.env.TEST_DATABASE_URL,timeout:120000},async t=>{
+ const {Pool}=require('pg'),express=require('express');
+ const schema='wallet_cp10_'+crypto.randomBytes(8).toString('hex');
+ const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
+ await admin.query('CREATE SCHEMA '+schema);
+ const url=new URL(process.env.TEST_DATABASE_URL);
+ url.searchParams.set('options','-c search_path='+schema+',public');
+ const db=new Pool({connectionString:url.toString()});
+ let srv;
+ t.after(async()=>{
+   if(srv)await new Promise(ok=>srv.close(ok));
+   await db.end();
+   await admin.query('DROP SCHEMA '+schema+' CASCADE');
+   await admin.end();
+ });
+ await db.query('CREATE TABLE gameops_games(id uuid PRIMARY KEY,name text NOT NULL)');
+ await db.query('CREATE TABLE gameops_players(id uuid PRIMARY KEY,game_id uuid NOT NULL REFERENCES gameops_games(id),player_ref text NOT NULL)');
+ await db.query("CREATE TABLE gameops_audit(id bigserial PRIMARY KEY,actor text NOT NULL,action text NOT NULL,resource text NOT NULL,details jsonb NOT NULL DEFAULT '{}'::jsonb)");
+ await wallet.ensureSchema(db);
+ await wallet.ensureSchema(db);
+ const game='10000000-0000-4000-8000-000000000001',another='10000000-0000-4000-8000-000000000002';
+ const p1='20000000-0000-4000-8000-000000000001',p2='20000000-0000-4000-8000-000000000002',p3='20000000-0000-4000-8000-000000000003';
+ await db.query('INSERT INTO gameops_games(id,name) VALUES($1,$2),($3,$4)',[game,'QA Game',another,'Other QA Game']);
+ await db.query('INSERT INTO gameops_players(id,game_id,player_ref) VALUES($1,$2,$3),($4,$5,$6),($7,$8,$9)',[p1,game,'player-one',p2,game,'player-two',p3,another,'player-three']);
+ const app=express();app.use(express.json());wallet.mount(app,{pool:db,currentActor:()=> 'qa_owner'});
+ srv=await new Promise(ok=>{const server=app.listen(0,'127.0.0.1',()=>ok(server))});
+ const urlBase='http://127.0.0.1:'+srv.address().port;
+ async function req(path,method='GET',body){
+  const res=await fetch(urlBase+path,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  return {status:res.status,data:await res.json()};
+ }
+ const path1='/api/admin/virtual-wallets/'+p1;
+ const first=await req(path1);assert.equal(first.status,200);assert.equal(first.data.balance,'0');
+ const credit=valid(100),added=await req(path1+'/adjust','POST',{...credit,action:'credit'});
+ assert.equal(added.status,200);assert.equal(added.data.balance,'100');
+ const duplicate=await req(path1+'/adjust','POST',{...credit,action:'credit'});assert.equal(duplicate.status,200);assert.equal(duplicate.data.replay,true);
+ const conflict=await req(path1+'/adjust','POST',{...credit,amount:200,action:'credit'});assert.equal(conflict.status,409);
+ const invalid=await req(path1+'/adjust','POST',{...valid(-2),action:'debit'});assert.equal(invalid.status,400);
+ const debit=await req(path1+'/adjust','POST',{...valid(40),action:'debit'});assert.equal(debit.data.balance,'60');
+ const insufficient=valid(70),fail=await req(path1+'/adjust','POST',{...insufficient,action:'debit'});assert.equal(fail.status,409);
+ const orphan=await db.query('SELECT id FROM gameops_virtual_wallet_operations WHERE idempotency_key=$1',[insufficient.idempotency_key]);assert.equal(orphan.rowCount,0);
+ const transfer=valid(30),sent=await req(path1+'/transfer','POST',{...transfer,to_player_id:p2});
+ assert.equal(sent.status,200);assert.equal(sent.data.fromBalance,'30');assert.equal(sent.data.toBalance,'30');
+ const same=await req(path1+'/transfer','POST',{...transfer,to_player_id:p2});assert.equal(same.data.replay,true);
+ const noCross=await req(path1+'/transfer','POST',{...valid(10),to_player_id:p3});assert.equal(noCross.status,400);
+ const [a,b]=await Promise.all([req(path1+'/adjust','POST',{...valid(25),action:'debit'}),req(path1+'/adjust','POST',{...valid(25),action:'debit'})]);
+ assert.equal([a.status,b.status].filter(s=>s===200).length,1,'concurrent debits may not overdraw');
+ const w=await req(path1),w2=await req('/api/admin/virtual-wallets/'+p2);
+ assert.equal(w.data.balance,'5');assert.equal(w2.data.balance,'30');
+ const conservation=await db.query("SELECT coalesce(sum(delta),0)::text AS total FROM gameops_virtual_wallet_entries WHERE operation_id=$1",[sent.data.operationId]);
+ assert.equal(conservation.rows[0].total,'0');
+ const audits=await db.query("SELECT count(*)::int AS n FROM gameops_audit WHERE actor='qa_owner' AND action LIKE 'virtual_wallet.%'");
+ assert.equal(audits.rows[0].n,4);
+ const history=await req('/api/admin/virtual-ledger');assert.equal(history.status,200);assert.ok(history.data.items.length>=4);
+});

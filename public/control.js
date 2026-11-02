@@ -14,7 +14,8 @@ const sidebar=[
  ['Subscribers','subscribers',[]],
  ['System Setting','settings',[]],
  ['Extra','extra',[['extra/application','Application'],['extra/server','Server'],['extra/cache','Cache'],['extra/update','Update']]],
- ['Report & Request','report-request',[]]
+ ['Report & Request','report-request',[]],
+ ['Functional QA','parity',[]]
 ];
 const settingItems=[
  ['general','General Setting','Site identity, theme and virtual unit formatting','⚙'],
@@ -100,7 +101,7 @@ async function game(id){const data=await api(apiBase+'deep/games/'+id);const g=d
  '<form class="game-editor" id="game-edit" data-id="'+E(id)+'"><input type="hidden" name="version" value="'+E(g.version)+'"><div class="grid"><section class="panel"><h2>Game Identity</h2>'+
  formFields([['Game Name','name','text',g.name],['Short Code','code','text',g.code],['Platform','platform','text',g.platform]])+
  '<div class="image-preview">'+(g.has_image?'<img src="'+apiBase+'deep/games/'+E(id)+'/image?at='+Date.now()+'" alt="Game artwork">':'No artwork uploaded')+'</div><label class="field">Artwork (PNG/JPEG/WebP, max 500KB after compression)<input id="game-image" type="file" accept="image/png,image/jpeg,image/webp"></label></section>'+
- '<section class="panel"><h2>Game Demo Settings</h2>'+formFields([['Demo Winning Chance (%)','demo_chance','number',g.demo_chance],['Minimum Demo Invest','min_invest','number',g.min_invest],['Maximum Demo Invest','max_invest','number',g.max_invest],['Invest / Give Back','invest_enabled','checkbox',g.invest_enabled],['Trending','trending','checkbox',g.trending],['Featured','featured','checkbox',g.featured]])+'</section></div>'+
+ '<section class="panel"><h2>Game Demo Settings</h2>'+formFields([['Winning Chance (%) · Sandbox only','winning_chance','number',g.winning_chance??50],['Winning Chance For Demo (%)','demo_chance','number',g.demo_chance],['Win Amount (%) · Sandbox only','win_amount','number',g.win_amount??50],['Minimum Demo Invest','min_invest','number',g.min_invest],['Maximum Demo Invest','max_invest','number',g.max_invest],['Invest / Give Back','invest_enabled','checkbox',g.invest_enabled],['Trending','trending','checkbox',g.trending],['Featured','featured','checkbox',g.featured]])+'</section></div>'+
  '<section class="panel"><h2>Game Instructions</h2>'+formFields([['Instructions (safe plain text; rich text editor planned)','instructions','textarea',g.instructions]])+
  '<div class="form-actions"><button class="btn" type="submit">Save Configuration</button></div></section></form>';
 }
@@ -122,12 +123,12 @@ async function players(state){if(['email','mobile','kyc','kyc-pending'].includes
  notice('User Details do not include email, phone or identification records. Local status has no enforcement at the external game engine.')+
  table(['Player','Game','Rounds','Local Status','Last Seen','Detail'],q.items.map(x=>[link(x.player_ref,'player/'+x.id),E(x.game),n(x.rounds),badge(x.local_status),fmt(x.last_seen),link('Details →','player/'+x.id)]));
 }
-async function player(id){const d=await api(apiBase+'deep/players/'+id),p=d.item;
+async function player(id){const [d,w]=await Promise.all([api(apiBase+'deep/players/'+id),api(apiBase+'virtual-wallets/'+id)]),p=d.item;
  const fields=[['First Name','first_name','text',p.first_name],['Last Name','last_name','text',p.last_name],['City','city','text',p.city],['State','state','text',p.state],['ZIP/Postal','zip','text',p.zip],['Country','country','text',p.country],['Local Status (not enforced in game)','local_status','select',p.local_status,'active|review|blocked_locally'],['Admin Note','admin_note','textarea',p.admin_note]];
  return heading('User Detail · '+p.player_ref,'Pseudonymous player · '+p.game,'players/all')+
- '<div class="stats">'+metric('Balance','Not enabled','◇')+metric('Total Played',n(p.total_played),'◈','player-rounds/'+p.id)+metric('Total Win',n(p.total_win),'◆','player-rounds/'+p.id)+metric('Net Return',n(p.net_return),'◎','player-rounds/'+p.id)+'</div>'+
- '<div class="toolbar"><button class="btn ghost" disabled title="Wallet integration required">+ Balance</button><button class="btn ghost" disabled>- Balance</button><button class="btn ghost" data-go="report/logins">Logins</button><button class="btn ghost" data-go="report/notifications">Notifications</button><button class="btn ghost" disabled>Login as User (disabled)</button></div>'+
- notice('KYC, Email/Mobile verification, 2FA and wallet are not connected. Any local status changes affect only this admin database.','warn')+
+ '<div class="stats">'+metric('Virtual Balance · DEMO_COIN',n(w.balance),'◇','wallet/'+p.id)+metric('Total Played',n(p.total_played),'◈','player-rounds/'+p.id)+metric('Total Win',n(p.total_win),'◆','player-rounds/'+p.id)+metric('Net Return',n(p.net_return),'◎','player-rounds/'+p.id)+'</div>'+
+ '<div class="toolbar"><button class="btn ghost" data-action="wallet-credit" data-id="'+E(id)+'">+ Virtual Balance</button><button class="btn ghost" data-action="wallet-debit" data-id="'+E(id)+'">− Virtual Balance</button><button class="btn ghost" data-go="wallet/'+E(id)+'">Ledger</button><button class="btn ghost" data-go="report/logins">Logins</button><button class="btn ghost" data-go="report/notifications">Notifications</button><button class="btn ghost" disabled>Login as User (disabled)</button></div>'+
+ notice('Virtual wallet is internal DEMO_COIN only, with an audited ledger. It does not sync with external games. KYC, email/mobile verification, user 2FA and impersonation remain disabled.','warn')+
  '<form class="panel" id="player-edit" data-id="'+E(id)+'"><h2>Profile Metadata</h2><input type="hidden" name="version" value="'+E(p.version)+'">'+formFields(fields)+
  '<div class="form-actions"><button class="btn" type="submit">Save Metadata</button></div></form>';
 }
@@ -198,8 +199,39 @@ async function extra(kind){const q=await api(apiBase+'deep/system/'+kind);
 }
 async function reportRequest(){return heading('Report & Request','Use support tickets for internal reporting and requests','tickets/all')+notice('External abuse-report workflow is not connected. Create an auditable support ticket instead.')+
  '<button class="btn" data-action="ticket-create">Create Internal Ticket</button>'}
+
+async function wallet(id){
+ const w=await api(apiBase+'virtual-wallets/'+id);
+ return heading('Virtual Wallet · '+w.player.player_ref,'Audited DEMO_COIN only · no payout, external game sync or cash equivalence','player/'+id)+
+ notice(w.notice,'warn')+
+ '<div class="stats">'+metric('Virtual Balance',n(w.balance),'◇')+metric('Ledger Entries',w.entries.length,'▥')+'</div>'+
+ '<div class="toolbar"><button class="btn green" data-action="wallet-credit" data-id="'+E(id)+'">+ Credit</button>'+
+ '<button class="btn warn" data-action="wallet-debit" data-id="'+E(id)+'">− Debit</button>'+
+ '<button class="btn ghost" data-action="wallet-transfer" data-id="'+E(id)+'">Transfer to Another Player</button>'+
+ '<button class="btn ghost" data-go="report/transfers">Transfer History</button></div>'+
+ table(['Time','Action','Delta','Balance After','Actor','Reason'],
+ w.entries.map(x=>[fmt(x.created_at),badge(x.action),n(x.delta),n(x.balance_after),E(x.actor),E(x.note)]));
+}
+async function parity(){
+ const d=await api(apiBase+'parity');
+ const s=d.service;
+ const chips=Object.keys(d.counts).map(k=>'<span class="pill '+(k==='blocked'?'danger':k==='implemented'?'good':'warning')+'">'+E(k)+': '+n(d.counts[k])+'</span>').join(' ');
+ return heading('Functional QA · Xaxino Parity','Evidence-based inventory of route, backend and integration gaps')+
+ notice('Live Xaxino nested pages are only partially accessible. Implemented means source-backed; this dashboard is not proof that vendor parity or end-to-end game sync is complete.','warn')+
+ '<div class="panel"><h2>Runtime dependencies</h2><div class="status-line">'+
+ ['database','adminAccounts','gameProfiles','virtualWallet','externalGameWallet','playerIdentityProvider','kycProvider','paymentProvider'].map(k=>'<span class="pill '+(s[k]===true||s[k]==='connected'?'good':'warning')+'">'+E(k)+': '+E(s[k])+'</span>').join('')+'</div></div>'+
+ '<div class="panel"><h2>Functional inventory</h2><div class="status-line" style="margin-bottom:12px">'+chips+'</div>'+
+ '<div class="toolbar"><input id="parity-search" class="qsearch" placeholder="Filter menu, action or gap..." aria-label="Search functional inventory">'+
+ '<select id="parity-status" class="qsearch" style="width:170px"><option value="">All statuses</option><option>implemented</option><option>partial</option><option>blocked</option><option>navigation</option></select></div>'+
+ '<div class="table-scroller"><table class="table"><thead><tr><th>Module</th><th>Function / Page</th><th>Current Status</th><th>Scope / Gap</th><th>Open</th></tr></thead><tbody>'+
+ d.items.map(x=>'<tr class="parity-row" data-status="'+E(x.status)+'" data-search="'+E((x.group+' '+x.name+' '+(x.notes||'')).toLowerCase())+'"><td>'+E(x.group)+'</td><td>'+E(x.name)+'</td><td><span class="pill '+(x.status==='blocked'?'danger':x.status==='implemented'?'good':'warning')+'">'+E(x.status)+'</span></td><td>'+E(x.notes||'Navigation inventory')+'</td><td>'+link('Open →',x.route)+'</td></tr>').join('')+
+ '</tbody></table></div></div>';
+}
+
 async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts[2];
  if(a==='dashboard')return dashboard();
+ if(a==='wallet')return wallet(b);
+ if(a==='parity')return parity();
  if(a==='games')return games();
  if(a==='game')return game(b);
  if(a==='game-rounds')return gameRounds(b);
@@ -224,7 +256,7 @@ async function show(){const parts=route.split('/'),a=parts[0],b=parts[1],c=parts
  return heading('Not found','This route has not been implemented','dashboard');
 }
 async function render(){route=getRoute();const current=++renderSequence;$('#app').innerHTML=shell('<div class="loading">Loading '+E(route)+'…</div>');
- try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
+ try{const content=await show();if(current!==renderSequence)return;$('#app').innerHTML=shell(content);if(route==='parity'){const apply=()=>{const q=($('#parity-search')?.value||'').toLowerCase(),status=$('#parity-status')?.value||'';document.querySelectorAll('.parity-row').forEach(tr=>{tr.hidden=!!((status&&tr.dataset.status!==status)||(q&&!tr.dataset.search.includes(q)))})};$('#parity-search')?.addEventListener('input',apply);$('#parity-status')?.addEventListener('change',apply)}if(route==='settings')$('#settings-filter')?.addEventListener('input',e=>{searchTerm=e.target.value;const tiles=settingItems.filter(x=>x[1].toLowerCase().includes(searchTerm.toLowerCase()));$('#settings-grid').innerHTML=tiles.map(([key,label,desc,icon])=>'<button class="settings-item" data-go="'+(key==='pages'?'content/page':key==='policies'?'content/policy':key==='templates'?'content/template':key==='frontend'?'content/frontend':'setting/'+key)+'"><span class="tileicon">'+icon+'</span><span><b>'+E(label)+'</b><small>'+E(desc)+'</small></span></button>').join('')})}
  catch(e){if(current!==renderSequence)return;$('#app').innerHTML=shell(heading('Load failed',e.message,'dashboard')+notice('Endpoint may be unavailable. Use Refresh after checking Railway logs.','warn'));console.error(e)}}
 function modal(title,fields,action){document.querySelector('.modal-screen')?.remove();const el=document.createElement('div');el.className='modal-screen';el.innerHTML='<div class="modal"><h2>'+E(title)+'</h2><form id="modal-form" data-kind="'+E(action)+'">'+formFields(fields)+'<div class="form-actions"><button type="button" class="btn ghost" data-action="close">Cancel</button><button class="btn">Save</button></div></form></div>';document.body.appendChild(el)}
 function allRoutes(){return sidebar.flatMap(g=>[[g[1],g[0]],...g[2]]).concat(settingItems.map(x=>['setting/'+x[0],x[1]]))}
@@ -241,6 +273,12 @@ document.addEventListener('click',async e=>{
   if(a==='close'){document.querySelector('.modal-screen')?.remove();return}
   if(a==='refresh')return render();
   if(a==='logout'){await api('/api/auth/logout','POST');location.replace('/login');return}
+  if(['wallet-credit','wallet-debit','wallet-transfer'].includes(a)){
+    const fields=[['Amount (DEMO_COIN)','amount','number','100'],['Reason (minimum 5 characters)','note','text','Internal development adjustment']];
+    if(a==='wallet-transfer')fields.unshift(['Recipient Player UUID (same game)','to_player_id','text','']);
+    modal(a==='wallet-transfer'?'Transfer Virtual Credits':a==='wallet-credit'?'Credit Virtual Balance':'Debit Virtual Balance',fields,a);
+    $('#modal-form').dataset.player=btn.dataset.id;return;
+  }
   if(a==='game-create')return modal('Add Game',[['Game Name','name','text',''],['Slug','slug','text',''],['Code','code','text',''],['Platform','platform','text','Web / PWA']],'game');
   if(a==='ticket-create')return modal('New Support Ticket',[['Subject','subject','text',''],['Requester Reference','requester_ref','text',''],['Priority','priority','select','Medium','Low|Medium|High']],'ticket');
   if(a==='subscriber-create')return modal('Register Subscriber',[['Email Address','contact','text','']],'subscriber');
@@ -262,6 +300,12 @@ document.addEventListener('submit',async e=>{
   if(form.id==='notification-create'){await api(apiBase+'deep/notifications','POST',v);toast('Recorded internally · not delivered');return render()}
   if(form.id==='content-edit'){const kind=form.dataset.kind,id=form.dataset.id;const uri=apiBase+'deep/content/'+kind+(id==='new'?'':'/'+id);await api(uri,id==='new'?'POST':'PUT',v);toast('Content saved');go('content/'+kind);return}
   if(form.id==='modal-form'){const kind=form.dataset.kind;
+   if(['wallet-credit','wallet-debit','wallet-transfer'].includes(kind)){
+     const player=form.dataset.player,transfer=kind==='wallet-transfer';
+     const body={...v,idempotency_key:crypto.randomUUID(),...(transfer?{}:{action:kind==='wallet-credit'?'credit':'debit'})};
+     await api(apiBase+'virtual-wallets/'+player+(transfer?'/transfer':'/adjust'),'POST',body);
+     document.querySelector('.modal-screen')?.remove();toast('DEMO_COIN ledger saved and audited');go('wallet/'+player);return render();
+   }
    if(kind==='game')await api(apiBase+'games','POST',v);
    if(kind==='ticket')await api(apiBase+'tickets','POST',v);
    if(kind==='subscriber')await api(apiBase+'deep/subscribers','POST',v);
