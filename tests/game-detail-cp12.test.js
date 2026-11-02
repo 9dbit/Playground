@@ -71,7 +71,7 @@ test('Checkpoint 12: legacy schema migration, edit persistence and scoped observ
   return {status:res.status,data};
  }
  const before=await request('games/'+game);
- assert.equal(before.status,200);
+ assert.equal(before.status,200,JSON.stringify(before.data));
  assert.equal(before.data.item.winning_chance,50);
  assert.equal(before.data.item.win_amount,50);
  const config={name:'QA Primary Game Revised',code:'QA',platform:'Web',demo_chance:20,

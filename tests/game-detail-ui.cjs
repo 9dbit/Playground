@@ -93,7 +93,7 @@ function filteredRounds(url,onlyPlayer){
   await page.locator('input[name=winning_chance]').fill('62');
   await page.locator('input[name=win_amount]').fill('31');
   await page.locator('#game-edit button[type=submit]').click();
-  await page.locator('input[name=version][value="2"]').waitFor();
+  await page.locator('input[name=version][value="2"]').waitFor({state:'attached'});
   assert.equal(writes[0].winning_chance,62);
   assert.equal(writes[0].win_amount,31);
   assert.equal(game.winning_chance,62);
