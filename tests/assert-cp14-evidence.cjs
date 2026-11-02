@@ -1,0 +1,12 @@
+'use strict';
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const report=JSON.parse(fs.readFileSync('test-results/cp14-remediation.json','utf8'));
+const expected=['C01','F01','F05','F02','F03','F06','F07','F08','F04','C02'];
+assert.equal(report.release,'0.14.0');
+assert.equal(report.productionContacted,false);
+assert.equal(report.productionModified,false);
+assert.deepEqual(report.checks.map(x=>x.id),expected,'Missing or duplicated acceptance checks');
+assert.ok(report.checks.every(x=>x.status==='PASS'),'At least one acceptance finding remains open');
+assert.equal(report.result,'PASS');
+console.log('CP14 evidence gate: all eight findings and two safety checks passed through the full server.');

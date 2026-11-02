@@ -5,10 +5,13 @@ on:
     branches: [main]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   full-server:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:18
@@ -33,14 +36,19 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
       - name: Regression and full-server acceptance tests
-        run: npm test | tee cp14-regression.log
-      - name: Install browser tooling
         run: |
-          npm install --no-save --no-package-lock playwright@1.56.1
+          set -euo pipefail
+          npm test 2>&1 | tee cp14-regression.log
+          node tests/assert-cp14-evidence.cjs
+      - name: Install browser tooling without changing lockfile
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1 --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Browser acceptance against actual server and PostgreSQL
-        run: node tests/p1p2-live-browser.cjs
-      - name: Package review source
+        run: |
+          set -euo pipefail
+          node tests/p1p2-live-browser.cjs 2>&1 | tee cp14-browser.log
+      - name: Package reviewed source
         if: always()
         run: |
           git archive --format=tar.gz --output=cp14-source.tar.gz HEAD
@@ -53,5 +61,6 @@ jobs:
             cp14-source.tar.gz
             cp14-tested-commit.txt
             cp14-regression.log
+            cp14-browser.log
             test-results/
           retention-days: 14
