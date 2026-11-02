@@ -1,0 +1,52 @@
+name: CP14 P1 P2 Remediation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  full-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: gameops_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_ephemeral_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gameops_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci_ephemeral_only@127.0.0.1:5432/gameops_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Regression and full-server acceptance tests
+        run: npm test | tee cp14-regression.log
+      - name: Package review source and native QA dependencies
+        if: always()
+        run: |
+          git archive --format=tar.gz --output=cp14-source.tar.gz HEAD
+          tar -czf cp14-node-dependencies.tar.gz node_modules package-lock.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cp14-release-evidence
+          path: |
+            cp14-source.tar.gz
+            cp14-node-dependencies.tar.gz
+            cp14-regression.log
+            test-results/
+          retention-days: 14
