@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 maintenance/cp14-source.py
           python3 maintenance/cp14-ui.py
+          python3 -c "from pathlib import Path; p=Path('engine/deep-routes.js'); p.write_text('\n'.join(x.rstrip() for x in p.read_text().splitlines())+'\n')"
           git diff --check
       - name: Resolve and lock dependencies
         run: npm install --no-audit --no-fund
