@@ -31,7 +31,7 @@ try{
   else if(p==='/api/admin/summary')data={rounds:2,stake:'150',payout:'70'};
   else if(p==='/api/admin/deep/summary')data={games:{total:1,active:0},players:{total:1},tickets:{total:0,open:0},subscribers:0,published:0};
   else if(p==='/api/admin/deep/games')data={items:[game]};
-  else if(p==='/api/admin/deep/games/'+gid){data={item:game}}
+  else if(req.method()==='GET'&&p==='/api/admin/deep/games/'+gid){data={item:game}}
   else if(p==='/api/admin/deep/players/'+pid)data={item:player};
   else if(p==='/api/admin/deep/players?state=all')data={items:[player]};
   else if(p==='/api/admin/virtual-wallets/'+pid){
