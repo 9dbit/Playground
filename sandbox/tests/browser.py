@@ -15,7 +15,7 @@ with sync_playwright() as p:
  checks.append('anonymous browser opens dashboard directly; no login or MFA')
  page.screenshot(path=str(out/'sandbox-desktop.png'),full_page=True)
  gid='10000000-0000-4000-8000-000000000001';pid='20000000-0000-4000-8000-000000000001';tid='40000000-0000-4000-8000-000000000001'
- routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','game/'+gid,'game-rounds/'+gid,'player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
+ routes=['dashboard','games','rounds','players/all','players/active','players/banned','players/email','players/mobile','players/kyc','players/kyc-pending','diamonds/all','diamonds/pending','diamonds/approved','diamonds/rejected','tickets/all','tickets/pending','tickets/closed','tickets/answered','notify','report/transactions','report/logins','report/notifications','report/transfers','subscribers','settings','extra/application','extra/server','extra/cache','extra/update','report-request','parity','wallet/'+pid,'game/'+gid,'game-rounds/'+gid,'player/'+pid,'player-rounds/'+pid,'round/1','ticket/'+tid,'request/30000000-0000-4000-8000-000000000001','content/page','content/policy','content/template','content/frontend']
  routes+=['setting/'+s for s in ['general','logo','configuration','notification','seo','kyc','social','language','extensions','cron','maintenance','gdpr','css','sitemap','robots']]
  for r in routes:
   page.goto(base+'/engine#/'+r);page.locator('h1').wait_for();assert page.locator('h1').inner_text()!='Load failed',r
@@ -25,6 +25,22 @@ with sync_playwright() as p:
  page.get_by_text('Version 2 saved',exact=False).wait_for();page.reload();page.locator('#game-edit').wait_for()
  assert page.locator('input[name=name]').input_value()=='SANDBOX edited game'
  checks.append('game edit persists only in browser tab across reload')
+ assert page.locator('input[name=winning_chance]').count()==1
+ assert page.locator('input[name=win_amount]').count()==1
+ checks.append('game sandbox chance and win amount fields remain editable')
+ page.goto(base+'/engine#/wallet/'+pid);page.get_by_role('heading',name='Virtual Wallet',exact=False).wait_for()
+ assert page.locator('.stats').count()==1
+ page.locator('[data-action=wallet-credit]').first.click()
+ page.locator('#modal-form').wait_for()
+ page.locator('#modal-form input[name=amount]').fill('20')
+ page.locator('#modal-form input[name=note]').fill('QA sandbox virtual credit')
+ page.locator('#modal-form button.btn').last.click()
+ page.get_by_role('heading',name='Virtual Wallet',exact=False).wait_for()
+ assert '120' in page.locator('.stats').inner_text()
+ checks.append('synthetic virtual credits update browser-only balance and ledger')
+ page.goto(base+'/engine#/parity');page.locator('.parity-row').first.wait_for()
+ assert page.locator('.parity-row').count()>=19
+ checks.append('functional parity matrix visible with blocked/partial states')
  page.goto(base+'/engine#/ticket/'+tid);page.locator('#ticket-reply').wait_for()
  page.locator('textarea[name=body]').fill('Synthetic browser-only reply');page.locator('#ticket-reply button').click()
  page.get_by_text('Synthetic browser-only reply',exact=True).wait_for();checks.append('local ticket reply flow works')

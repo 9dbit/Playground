@@ -6,7 +6,7 @@ Open `/` to inspect the UI without login. Form edits are simulated and stored on
 
 Server: exact file allowlist, GET/HEAD only, no API endpoints, no directory serving or proxy, CSP blocks network connections. Startup refuses production credentials. Deploy ONLY this directory as its own service with no database, mounted volume, secret or game integration. No runtime network request is made by this service.
 
-UI source: 9dbit/Playground main ff240a1fd9d9580c3b20bbffed90c47e64ed49c6. Labels are annotated as simulation. Form writes are demonstration state only; this is not evidence of working production workflows.
+UI source: 9dbit/Playground main 88c039ea8679bb89b0928296b82e225cb6b022fe (Checkpoint 10). This updated sandbox includes browser-only Functional QA and synthetic internal DEMO_COIN wallet ledger. These NEVER change any production database or external game wallet. Labels are annotated as simulation. Form writes are demonstration state only; this is not evidence of working production workflows.
 
 Run `npm test`, then `npm start` (no npm dependencies). CI separately tests 56 menu/detail paths, local edits, reset and per-browser isolation using Playwright.
 
