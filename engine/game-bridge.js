@@ -1,6 +1,7 @@
 'use strict';
 // CP09: this transport observes engines. It never issues game commands or moves balances.
 const crypto = require('node:crypto');
+const streams = require('./stream-reconciliation');
 const PATH = '/api/v2/game-bridge';
 const MAX_BODY = 8192;
 const SKEW = 300;
@@ -60,15 +61,16 @@ function validate(value, key, now = Date.now()) {
     // A heartbeat's capabilities are sender claims, not proof of round ingestion.
     return { type:'heartbeat', version:value.version, health:value.health, deployment:value.deployment, capabilities:value.capabilities };
   }
+  if(value.type==='source.reconcile') return streams.snapshot(value,key,decimal,BridgeError,now);
   if (value.type !== 'round.settled') throw new BridgeError(400,'UNKNOWN_EVENT_TYPE');
   if (!key.allowRounds) throw new BridgeError(403,'ROUND_INGESTION_DISABLED');
-  const expected = ['schema_version','game','environment','type','event_id','round_id','player_ref','currency','stake','payout','occurred_at'];
+  const expected = ['schema_version','game','environment','type','event_id','round_id','player_ref','currency','stake','payout','occurred_at','stream_id','source_sequence'];
   if (Object.keys(value).some(k=>!expected.includes(k)) || !SAFE_ID.test(value.event_id || '') || !SAFE_ID.test(value.round_id || '') ||
       !/^p_[a-f0-9]{64}$/.test(value.player_ref || '') || value.currency !== 'DEMO_COIN' || typeof value.occurred_at !== 'string' ||
       !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value.occurred_at) || !Number.isFinite(Date.parse(value.occurred_at)) ||
       Date.parse(value.occurred_at)>now+60000 || Date.parse(value.occurred_at)<now-30*86400000) throw new BridgeError(400,'INVALID_ROUND');
   return { type:'round.settled', event_id:value.event_id, round_id:value.round_id, player_ref:value.player_ref,
-    currency:'DEMO_COIN', stake:decimal(value.stake), payout:decimal(value.payout), occurred_at:new Date(value.occurred_at).toISOString() };
+    currency:'DEMO_COIN', stake:decimal(value.stake), payout:decimal(value.payout), occurred_at:new Date(value.occurred_at).toISOString(),...streams.streamFields(value,BridgeError) };
 }
 const DDL = `
 CREATE TABLE IF NOT EXISTS gameops_bridge_state (
@@ -91,10 +93,11 @@ CREATE TABLE IF NOT EXISTS gameops_bridge_rounds (
 );
 CREATE INDEX IF NOT EXISTS gameops_bridge_rounds_game_idx ON gameops_bridge_rounds(game_id,id DESC);
 `;
-function createBridge({ pool, rawConfig = process.env.GAMEOPS_BRIDGE_KEYS, logger = console }) {
-  const keys = configuration(rawConfig);
+function createBridge({ pool, rawConfig = process.env.GAMEOPS_BRIDGE_KEYS, rawAdditional=process.env.GAMEOPS_ADDITIONAL_KEYS, logger = console }) {
+  const initial=configuration(rawConfig),extra=configuration(rawAdditional);
+  const keys=configuration(JSON.stringify([...initial,...extra]));
   async function init() {
-    await pool.query(DDL);
+    await pool.query(DDL); await streams.init(pool);
     await pool.query('INSERT INTO gameops_bridge_state(game_id) SELECT id FROM gameops_games ON CONFLICT DO NOTHING');
     await pool.query('DELETE FROM gameops_bridge_nonces WHERE expires_at<now()');
   }
@@ -116,24 +119,27 @@ function createBridge({ pool, rawConfig = process.env.GAMEOPS_BRIDGE_KEYS, logge
         await client.query('UPDATE gameops_bridge_state SET last_seen=now(),last_heartbeat_at=now(),last_health=$2,version=$3,deployment=$4,environment=$5,last_key_id=$6,capabilities=$7 WHERE game_id=$1',
           [gid,event.health,event.version,event.deployment,key.environment,key.id,JSON.stringify(event.capabilities)]);
         result={accepted:true,type:'heartbeat',game:key.game,environment:key.environment,rounds_enabled:key.allowRounds};
+      } else if(event.type==='source.reconcile') {
+        result=await streams.reconcile(client,gid,key,event,BridgeError);
       } else {
         const hash=digest(JSON.stringify(event));
-        const prior=await client.query('SELECT id::text,payload_hash FROM gameops_bridge_rounds WHERE game_id=$1 AND environment=$2 AND (source_event_id=$3 OR source_round_id=$4)',[gid,key.environment,event.event_id,event.round_id]);
+        const prior=await client.query('SELECT id::text,payload_hash FROM gameops_bridge_rounds WHERE game_id=$1 AND environment=$2 AND (source_event_id=$3 OR source_round_id=$4 OR ($5::uuid IS NOT NULL AND stream_id=$5 AND source_sequence=$6))',[gid,key.environment,event.event_id,event.round_id,event.stream_id||null,event.source_sequence||null]);
         if(prior.rowCount) {
           if(prior.rowCount!==1||prior.rows[0].payload_hash!==hash)throw new BridgeError(409,'EVENT_CONFLICT');
           await client.query('UPDATE gameops_bridge_state SET last_seen=now(),duplicate_rounds=duplicate_rounds+1 WHERE game_id=$1',[gid]);
-          result={accepted:true,duplicate:true,type:event.type,id:prior.rows[0].id};
+          result={accepted:true,duplicate:true,type:event.type,id:prior.rows[0].id,event_id:event.event_id,round_id:event.round_id,stream_id:event.stream_id||null,source_sequence:event.source_sequence||null};
         } else {
-          const inserted=await client.query('INSERT INTO gameops_bridge_rounds(game_id,environment,source_event_id,source_round_id,player_ref,currency,stake,payout,occurred_at,payload_hash,key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text',
-            [gid,key.environment,event.event_id,event.round_id,event.player_ref,event.currency,event.stake,event.payout,event.occurred_at,hash,key.id]);
+          const inserted=await client.query('INSERT INTO gameops_bridge_rounds(game_id,environment,source_event_id,source_round_id,player_ref,currency,stake,payout,occurred_at,payload_hash,key_id,stream_id,source_sequence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id::text',
+            [gid,key.environment,event.event_id,event.round_id,event.player_ref,event.currency,event.stake,event.payout,event.occurred_at,hash,key.id,event.stream_id||null,event.source_sequence||null]);
+          await client.query('INSERT INTO gameops_observed_players(game_id,environment,player_ref,last_seen) VALUES($1,$2,$3,$4) ON CONFLICT(game_id,environment,player_ref) DO UPDATE SET last_seen=greatest(gameops_observed_players.last_seen,EXCLUDED.last_seen)',[gid,key.environment,event.player_ref,event.occurred_at]);
           await client.query('UPDATE gameops_bridge_state SET last_seen=now(),last_round_at=now(),accepted_rounds=accepted_rounds+1,last_key_id=$2 WHERE game_id=$1',[gid,key.id]);
-          result={accepted:true,duplicate:false,type:event.type,id:inserted.rows[0].id};
+          result={accepted:true,duplicate:false,type:event.type,id:inserted.rows[0].id,event_id:event.event_id,round_id:event.round_id,stream_id:event.stream_id||null,source_sequence:event.source_sequence||null};
         }
       }
       await client.query('DELETE FROM gameops_bridge_nonces WHERE expires_at<now()');
       await client.query('COMMIT');
     } catch(e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
-    logger.info('[gameops-bridge]',JSON.stringify({type:result.type,game:key.game,environment:key.environment,accepted:true,duplicate:result.duplicate||false}));
+    logger.info('[gameops-bridge]',JSON.stringify({type:result.type,game:key.game,environment:key.environment,accepted:true,duplicate:result.duplicate||false,...(result.type==='source.reconcile'?{status:result.status,received_count:result.received_count,through_sequence:result.through_sequence}:{} )}));
     return { result, key, nonce };
   }
   async function summary() {

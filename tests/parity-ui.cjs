@@ -20,7 +20,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/*',async route=>{
   const req=route.request(),u=new URL(req.url()),p=u.pathname;
-  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/parity.css':'parity.css','/assets/admin-ops.css':'admin-ops.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js'};
+  const files={'/engine':'control.html','/assets/control.js':'control.js','/assets/control.css':'control.css','/assets/parity.css':'parity.css','/assets/admin-ops.css':'admin-ops.css','/assets/security-nav.js':'security-nav.js','/assets/bridge-nav.js':'bridge-nav.js','/assets/data-nav.js':'data-nav.js'};
   if(files[p]){
    const file=files[p];return route.fulfill({status:200,contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'application/javascript',body:fs.readFileSync(path.join(root,file))});
   }
