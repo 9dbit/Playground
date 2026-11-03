@@ -1,6 +1,9 @@
 'use strict';
 // Deny by default. Both original and deep APIs are covered; the UI is not an authorization boundary.
 const rules = [
+  ['GET', /^\/source-wallet\/(?:players(?:\/[0-9a-f-]{36})?|requests(?:\/[0-9a-f-]{36})?)\/?$/, ['owner','operator','support']],
+  ['POST', /^\/source-wallet\/requests\/?$/, ['owner','support']],
+  ['POST', /^\/source-wallet\/requests\/[0-9a-f-]{36}\/review\/?$/, ['owner']],
   ['GET', /^\/data\/(?:summary|rounds(?:\/[1-9][0-9]{0,17})?|reconciliations)\/?$/, ['owner','operator','support','viewer']],
   ['GET', /^\/data\/players(?:\/[0-9a-f-]{36})?\/?$/, ['owner','operator','support']],
   ['GET', /^\/ops\/search\/?$/, ['owner','operator','support','viewer']],
