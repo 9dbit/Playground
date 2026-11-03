@@ -1,0 +1,158 @@
+{
+  "mode": "postgresql-wasm",
+  "productionContacted": false,
+  "checks": [
+    {
+      "id": "T01",
+      "title": "Two tenant reads, guessed IDs and global APIs are isolated",
+      "status": "PASS",
+      "evidence": {
+        "crossTenant": 404,
+        "masterApi": 401
+      }
+    },
+    {
+      "id": "T02",
+      "title": "Permission and CSRF are enforced server-side",
+      "status": "PASS"
+    },
+    {
+      "id": "T03",
+      "title": "Paid deposit consumes stock and credits once, duplicate/conflict detected",
+      "status": "PASS",
+      "evidence": {
+        "credits": 1
+      }
+    },
+    {
+      "id": "T04",
+      "title": "Confirmed deposit is pending cash until provider settlement",
+      "status": "PASS"
+    },
+    {
+      "id": "T05",
+      "title": "Agent admin approves manual bank deposit; bank reference cannot be reused",
+      "status": "PASS"
+    },
+    {
+      "id": "T06",
+      "title": "Automatic transaction cannot be marked paid merely by supervisor",
+      "status": "PASS"
+    },
+    {
+      "id": "T07",
+      "title": "Late payment without stock remains received/credit pending",
+      "status": "PASS"
+    },
+    {
+      "id": "T08",
+      "title": "New beneficiary requires supervisor; bound approval is single use",
+      "status": "PASS"
+    },
+    {
+      "id": "T09",
+      "title": "Payout timeout is held; retry paid is exactly once, reversal once",
+      "status": "PASS"
+    },
+    {
+      "id": "T10",
+      "title": "Threshold < 1m auto, =1m manual and split cash cannot fund payout",
+      "status": "PASS",
+      "evidence": {
+        "below": "queued",
+        "equal": "review",
+        "split": "awaiting_agent_funding"
+      }
+    },
+    {
+      "id": "T11",
+      "title": "Game signed launch, reserve, settlement and replay are tenant bound",
+      "status": "PASS"
+    },
+    {
+      "id": "T12",
+      "title": "Concurrent wallet spending cannot exceed available balance",
+      "status": "PASS"
+    },
+    {
+      "id": "T13",
+      "title": "Gross/net examples and cross-month historical-rate credits reconcile",
+      "status": "PASS",
+      "evidence": {
+        "gross": "20000000",
+        "net": "8000000",
+        "credit": "-8000000"
+      }
+    },
+    {
+      "id": "T14",
+      "title": "Website content has CAS, escaped rendering, publication and rollback",
+      "status": "PASS"
+    },
+    {
+      "id": "T15",
+      "title": "Staff role/session revoke and CIDR restriction enforced",
+      "status": "PASS"
+    },
+    {
+      "id": "T16",
+      "title": "Immutable balanced journals and independent cash/coin books",
+      "status": "PASS"
+    },
+    {
+      "id": "T17",
+      "title": "Monthly statement locks and invoice cannot be duplicated",
+      "status": "PASS"
+    },
+    {
+      "id": "T18",
+      "title": "Full server health and admin pages remain available",
+      "status": "PASS"
+    },
+    {
+      "id": "T19",
+      "title": "Finalized journals reject appended entries and a failed transaction rolls back every book",
+      "status": "PASS"
+    },
+    {
+      "id": "T20",
+      "title": "Restricted players retain history and reviewed withdrawal access but cannot deposit or play",
+      "status": "PASS"
+    },
+    {
+      "id": "T21",
+      "title": "Signed game nonce replay, forged signatures and release slug substitution are rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "T22",
+      "title": "Canonical and verified domain routing cannot cross tenant boundaries",
+      "status": "PASS"
+    },
+    {
+      "id": "T23",
+      "title": "Operational guidance, private export and Chatvice merchant scope follow permissions",
+      "status": "PASS"
+    },
+    {
+      "id": "T24",
+      "title": "Automatic simulator recovers received deposits, settles cash and completes queued payouts without repeat posting",
+      "status": "PASS"
+    },
+    {
+      "id": "BROWSER",
+      "title": "Desktop/mobile dashboard and player website use the actual backend",
+      "status": "PASS",
+      "evidence": {
+        "pageErrors": 0,
+        "viewports": [
+          1440,
+          390
+        ]
+      }
+    }
+  ],
+  "failures": [],
+  "startedAt": "2026-11-03T10:30:20.300Z",
+  "completedAt": "2026-11-03T10:30:42.462Z"
+}
