@@ -7,6 +7,7 @@ const deep = require('./engine/deep-routes');
 const { createSecurity } = require('./engine/security');
 const { createBridge } = require('./engine/game-bridge');
 const gameData = require('./engine/game-data');
+const sourceWallet=require('./engine/source-wallet');
 const virtualWallet=require('./engine/virtual-wallet');
 const parity=require('./engine/parity');
 const adminOps=require('./engine/admin-operations');
@@ -19,7 +20,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.15.0';
+const VERSION = '0.16.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -30,6 +31,7 @@ const security = createSecurity({ pool, master: SESSION_SECRET,
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
 const bridge = createBridge({ pool });
+const wallet=sourceWallet.createWallet({pool});
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
 const safeInt = x => Number.isSafeInteger(x) && x >= 0 && x <= 1000000000000;
@@ -102,7 +104,7 @@ async function initDB() {
   for (const [name, slug, code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]) {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
-  await bridge.init();
+  await bridge.init(); await wallet.init();
   const conflicts=await publicContent.inspectConflicts(pool);
   console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }
@@ -115,9 +117,10 @@ app.get('/', (req, res) => res.redirect('/engine'));
 app.get('/engine', security.protectedPage('control.html'));
 app.get('/integrations', security.protectedPage('bridge.html'));
 app.get('/data', security.protectedPage('data.html'));
+app.get('/wallet',security.protectedPage('wallet.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
-for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js','data-ui.js','data-nav.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js','data-ui.js','data-nav.js','wallet-ui.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 for (const filename of ['control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
@@ -222,9 +225,11 @@ app.get('/api/admin/deep/system/:name',route(async(req,res)=>{
 }));
 // CP08 shared-key ingestion is retired. New integrations have immutable per-game scopes.
 app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_INGESTION_RETIRED',endpoint:'/api/v2/game-bridge'}));
+app.use('/api/v3/wallet-sync',(req,res,next)=>{if(!limit('wallet:'+(req.ip||'unknown'),120))return res.status(429).json({error:'RATE_LIMITED'});next();});
 app.use('/api/v2/game-bridge',(req,res,next)=>{if(!limit('bridge:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
 bridge.mount(app);
 gameData.mount(app,{pool});
+wallet.mount(app);
 deep.mount(app,{pool,audit});
 virtualWallet.mount(app,{pool,currentActor:security.currentActor});
 parity.mount(app,{pool});
