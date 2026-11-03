@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test'), assert=require('node:assert/strict'),crypto=require('node:crypto');
 const w=require('../engine/source-wallet'),policy=require('../engine/security-policy');
-const key={id:'qa-uno',game:'uno-luck',environment:'staging',secret:'ab'.repeat(32)};
+const key={id:'qa-uno',game:'uno-luck',environment:'staging',secret:'ab'.repeat(32),enabled:true};
 const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
 const now=()=>new Date().toISOString();
 function packet(){
