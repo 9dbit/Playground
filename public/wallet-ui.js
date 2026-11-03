@@ -42,7 +42,7 @@ async function render(){
    e.preventDefault();const btn=adjust.querySelector('button');btn.disabled=true;
    try{
     const x=(await api('players/'+encodeURIComponent(selected))).item,form=new FormData(adjust);
-    const result=await api('players/'+encodeURIComponent(selected)+'/commands','POST',{id:crypto.randomUUID(),action:form.get('action'),amount:String(form.get('amount')),expected_version:x.version,reason:String(form.get('reason'))});
+    const result=await api('players/'+encodeURIComponent(x.id)+'/commands','POST',{id:crypto.randomUUID(),action:form.get('action'),amount:String(form.get('amount')),expected_version:x.version,reason:String(form.get('reason'))});
     alert('Command '+result.item.id+' queued. No balance change is claimed until the source confirms it.');await render();
    }catch(err){alert(err.message);btn.disabled=false}
   };
