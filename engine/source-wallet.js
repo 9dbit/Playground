@@ -124,8 +124,8 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
     const ver=BigInt(e.version),before=BigInt(e.balance_before),after=BigInt(e.balance_after),delta=BigInt(e.delta);
     if(before+delta!==after||after<0n||after>1000000n)fail(409,'WALLET_ENTRY_BALANCE_CONFLICT');
     if(ver<=version){
-     const old=await db.query('SELECT entry_id,chain_hash FROM gameops_source_wallet_entries WHERE wallet_id=$1 AND version=$2',[w.id,e.version]);
-     if(!old.rowCount||old.rows[0].entry_id!==e.entry_id||old.rows[0].chain_hash!==e.chain_hash)fail(409,'WALLET_ENTRY_CONFLICT');
+     const old=await db.query('SELECT entry_id,chain_hash,reason,delta::text,balance_before::text,balance_after::text,occurred_at FROM gameops_source_wallet_entries WHERE wallet_id=$1 AND version=$2',[w.id,e.version]);
+     if(!old.rowCount||old.rows[0].entry_id!==e.entry_id||old.rows[0].chain_hash!==e.chain_hash||old.rows[0].reason!==e.reason||old.rows[0].delta!==e.delta||old.rows[0].balance_before!==e.balance_before||old.rows[0].balance_after!==e.balance_after||new Date(old.rows[0].occurred_at).toISOString()!==new Date(e.occurred_at).toISOString())fail(409,'WALLET_ENTRY_CONFLICT');
      continue;
     }
     if(ver!==version+1n||before!==balance||entryHash(manifest,e)!==e.chain_hash)fail(409,'WALLET_ENTRY_CHAIN_MISMATCH');
@@ -133,6 +133,7 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
     version=ver;balance=after;manifest=e.chain_hash;
    }
    const snapVer=BigInt(p.snapshot.version);
+   if(p.entries.some(e=>BigInt(e.version)>snapVer))fail(409,'WALLET_ENTRY_AHEAD_OF_SNAPSHOT');
    if(snapVer===version&&(p.snapshot.manifest!==manifest||BigInt(p.snapshot.balance)!==balance))fail(409,'WALLET_SOURCE_SNAPSHOT_CONFLICT');
    const reconciliation=snapVer===version?'matched':snapVer>version?'pending':'stale';
    await db.query('UPDATE gameops_source_wallets SET version=$2,balance=$3,manifest=$4,commands_enabled=$5,active_round=$6,reconciliation=$7,source_checked_at=$8,last_seen=now() WHERE id=$1',[w.id,String(version),String(balance),manifest,p.snapshot.commands_enabled,p.snapshot.active_round,reconciliation,p.snapshot.captured_at]);
@@ -147,6 +148,7 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
     if(!q.rowCount||q.rows[0].request_hash!==receipt.request_hash)fail(409,'WALLET_RECEIPT_CONFLICT');
     const c=q.rows[0];
     if(receipt.status==='applied'){
+     if(receipt.code!=='ok'||c.state==='failed')fail(409,'WALLET_RECEIPT_STATE_CONFLICT');
      const expectedEntry='admin.'+c.id;
      const row=await db.query('SELECT * FROM gameops_source_wallet_entries WHERE wallet_id=$1 AND version=$2',[w.id,receipt.version]);
      if(!row.rowCount||row.rows[0].entry_id!==expectedEntry||receipt.entry_id!==expectedEntry||
@@ -181,7 +183,7 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
  }
  async function queue(db,w,{id,action,amount,expected_version,reason,request_id},username){
   if(!commandsAllowed())fail(409,'WALLET_ADMIN_COMMANDS_DISABLED');
-  if(w.environment!=='staging'||w.reconciliation!=='matched'||!w.commands_enabled||w.active_round)fail(409,'WALLET_SOURCE_NOT_READY');
+  if(w.environment!=='staging'||w.reconciliation!=='matched'||!w.commands_enabled||w.active_round||!w.last_seen||Date.now()-Date.parse(w.last_seen)>90000)fail(409,'WALLET_SOURCE_NOT_READY');
   if(String(w.version)!==expected_version)fail(409,'WALLET_SOURCE_VERSION_CHANGED');
   const existing=await db.query("SELECT id FROM gameops_source_wallet_commands WHERE wallet_id=$1 AND state IN ('queued','delivered') LIMIT 1",[w.id]);
   if(existing.rowCount)fail(409,'WALLET_COMMAND_ALREADY_PENDING');
@@ -213,7 +215,7 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
   }));
   app.get('/api/admin/source-wallet/players/:id',wrap(async(req,res)=>{
    scope(req.query);if(!UUID.test(req.params.id))fail(400,'INVALID_WALLET_ID');
-   const q=await pool.query("SELECT id::text,observed_player_id::text,player_ref,stream_id::text,version::text,balance::text,reconciliation,commands_enabled,active_round,last_seen,source_checked_at FROM gameops_source_wallets WHERE id=$1 AND environment='staging'",[req.params.id]);
+   const q=await pool.query("SELECT id::text,observed_player_id::text,player_ref,stream_id::text,version::text,balance::text,reconciliation,commands_enabled,active_round,last_seen,source_checked_at FROM gameops_source_wallets WHERE (id=$1 OR observed_player_id=$1) AND environment='staging'",[req.params.id]);
    if(!q.rowCount)fail(404,'WALLET_NOT_FOUND');
    const entries=await pool.query("SELECT version::text,entry_id,reason,delta::text,balance_before::text,balance_after::text,occurred_at,received_at FROM gameops_source_wallet_entries WHERE wallet_id=$1 ORDER BY version DESC LIMIT 100",[req.params.id]);
    const cmds=await pool.query("SELECT id::text,state,action,amount::text,reason,expected_version::text,source_code,source_version::text,source_balance::text,created_at,updated_at FROM gameops_source_wallet_commands WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 50",[req.params.id]);
@@ -230,9 +232,9 @@ function createWallet({pool,keysRaw=process.env.GAMEOPS_WALLET_KEYS,commandsAllo
      typeof b.reason!=='string'||b.reason.trim().length<8||b.reason.length>300)fail(400,'INVALID_COMMAND');
    const amount=checkAmount(b.amount),reason=b.reason.trim();
    const result=await transaction(pool,async db=>{
-    const old=await db.query('SELECT id,state,action,amount::text,reason,expected_version::text FROM gameops_source_wallet_commands WHERE id=$1',[b.id]);
+    const old=await db.query('SELECT id,wallet_id,state,action,amount::text,reason,expected_version::text FROM gameops_source_wallet_commands WHERE id=$1',[b.id]);
     if(old.rowCount){
-     const x=old.rows[0];if(x.action!==b.action||x.amount!==b.amount||x.reason!==reason||x.expected_version!==b.expected_version)fail(409,'COMMAND_ID_CONFLICT');
+     const x=old.rows[0];if(x.wallet_id!==req.params.id||x.action!==b.action||x.amount!==b.amount||x.reason!==reason||x.expected_version!==b.expected_version)fail(409,'COMMAND_ID_CONFLICT');
      return {item:x,replay:true};
     }
     const q=await db.query("SELECT * FROM gameops_source_wallets WHERE id=$1 AND environment='staging' FOR UPDATE",[req.params.id]);
