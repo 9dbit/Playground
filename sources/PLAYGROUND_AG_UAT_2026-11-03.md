@@ -2,7 +2,9 @@
 
 Hasil: **25 lulus, 0 gagal**. Lingkungan: PostgreSQL WASM (PGlite), Express lengkap, HTTP nyata, dan Chromium headless. Data agen/pemain seluruhnya sintetis. Tidak ada pembayaran atau disbursement eksternal.
 
-Regresi existing: 48 lulus, 5 dilewati karena PostgreSQL native belum tersedia, 0 gagal. Workflow PostgreSQL 18 tersedia dalam perubahan, dan akan diverifikasi setelah push yang sudah diizinkan.
+Regresi lokal: 48 lulus, 5 dilewati karena PostgreSQL native belum tersedia, 0 gagal.
+
+Setelah publikasi, [CI PostgreSQL 18 + Chromium](https://github.com/9dbit/Playground/actions/runs/41622141420) pada commit `76fa31b7ac7fea70517886db96e85af9aef69e20` menghasilkan **82 tes regresi lulus, 0 gagal, 0 dilewati**, serta **25 skenario agency lulus, 0 gagal**. Lima workflow berakhir sukses. [Bukti CI](evidence/agency-ci-2026-11-03.json).
 
 | ID | Pemeriksaan | Hasil |
 |---|---|---|
@@ -37,5 +39,20 @@ Bukti terstruktur: [agency-system-2026-11-03.json](evidence/agency-system-2026-1
 Tampilan dashboard: [desktop](evidence/agency-desktop.png), [mobile](evidence/agency-mobile.png).
 
 Rincian implementasi dan pekerjaan tersisa: [checkpoint](PLAYGROUND_AG_IMPLEMENTATION_STATUS_2026-11-03.md).
+
+## Verifikasi sandbox yang sudah dideploy
+
+[Sandbox Railway](https://playground-agent-sandbox-production.up.railway.app/agents) menggunakan PostgreSQL native dan skema `agency_sandbox_v1`. Pemeriksaan HTTP mencakup dua agen, MFA staff, deposit otomatis/manual, retry tanpa saldo ganda, penolakan akses lintas agen, withdraw dengan approval supervisor lalu auto-approve, top-up disbursement, invoice gross/net dan ekspor sesuai tenant. Pemeriksaan browser mencakup dashboard master, batas akses agen, tampilan mobile dan website player. Tiga game yang belum diverifikasi tetap tidak dapat diluncurkan.
+
+| Data simulasi | Shared / net | Split / gross |
+|---|---:|---:|
+| Penjualan koin | 10.000 | 5.000 |
+| Withdraw berhasil | 1.500 | 100 |
+| Saldo player akhir | 8.500 | 4.900 |
+| Invoice 20% | 1.700 | 1.000 |
+
+Closing bulan November dipercepat khusus simulasi. Invoice tetap sama saat closing diulang. Ini bukan tutup buku operasional bulan berjalan.
+
+Bukti: [HTTP dan pembersihan akun uji](evidence/agency-deployed-smoke-2026-11-03.json), [browser](evidence/agency-deployed-ui-2026-11-03.json), [panduan akses dan deployment](PLAYGROUND_AG_DEPLOYMENT_CHECKPOINT_2026-11-03.md).
 
 **Batas bukti:** protokol game diuji dengan adapter sintetis; ini bukan bukti ketiga native game telah cutover. Payment worker merupakan simulator, bukan gateway QRIS/VA/disbursement nyata. Chatvice privat/SSO belum diuji live.

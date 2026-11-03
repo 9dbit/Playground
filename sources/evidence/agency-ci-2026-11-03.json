@@ -1,0 +1,54 @@
+{
+  "commit": "76fa31b7ac7fea70517886db96e85af9aef69e20",
+  "tree": "29b370cee35d278bb1f0e843d24a5b8930470590",
+  "regression": {
+    "tests": 82,
+    "passed": 82,
+    "failed": 0,
+    "skipped": 0
+  },
+  "agency": {
+    "passed": 25,
+    "failed": 0,
+    "mode": "native-postgresql",
+    "database": "PostgreSQL 18",
+    "browser": "Chromium"
+  },
+  "workflows": [
+    {
+      "id": 41622141646,
+      "name": "GameOps Continuous Checks",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/9dbit/Playground/actions/runs/41622141646"
+    },
+    {
+      "id": 41622141420,
+      "name": "Agency system simulations",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/9dbit/Playground/actions/runs/41622141420"
+    },
+    {
+      "id": 41622141439,
+      "name": "CP14 Repair Verification",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/9dbit/Playground/actions/runs/41622141439"
+    },
+    {
+      "id": 41622141454,
+      "name": "CP15 Source Receiver Data Acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/9dbit/Playground/actions/runs/41622141454"
+    },
+    {
+      "id": 41622141577,
+      "name": "CP16 Authoritative Source Wallet Acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/9dbit/Playground/actions/runs/41622141577"
+    }
+  ]
+}

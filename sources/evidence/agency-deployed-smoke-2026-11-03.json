@@ -1,0 +1,68 @@
+{
+  "base_url": "https://playground-agent-sandbox-production.up.railway.app",
+  "commit": "76fa31b7ac7fea70517886db96e85af9aef69e20",
+  "started_at": "2026-11-03T10:54:15Z",
+  "completed_at": "2026-11-03T11:09:25Z",
+  "checks": [
+    {
+      "check": "Public HTTPS health",
+      "status": "PASS",
+      "version": "0.17.0"
+    },
+    {
+      "check": "Master password rotation, authenticator enrollment and authenticated dashboard",
+      "status": "PASS"
+    },
+    {
+      "check": "Two separate demo agencies and published simulation websites",
+      "status": "PASS",
+      "sites": [
+        "/site/demo-shared",
+        "/site/demo-split"
+      ]
+    },
+    {
+      "check": "Agent staff MFA and player registration",
+      "status": "PASS"
+    },
+    {
+      "check": "Automatic deposit, retry without double credit and separate cash settlement",
+      "status": "PASS",
+      "deposit": "de35d2bb-4998-46ba-8a51-f21f456f3e94",
+      "coins": "10000"
+    },
+    {
+      "check": "Manual deposit authority and cross-tenant/master API isolation",
+      "status": "PASS"
+    },
+    {
+      "check": "Supervisor approval then automatic known-beneficiary withdrawal",
+      "status": "PASS",
+      "final_player_coins": "8500"
+    },
+    {
+      "check": "Split deposit cash cannot fund payout; disbursement top-up resumes approved withdrawal",
+      "status": "PASS"
+    },
+    {
+      "check": "20 percent net/gross invoices and idempotent closing",
+      "status": "PASS",
+      "net": "1700",
+      "gross": "1000"
+    },
+    {
+      "check": "Scoped CSV, support ticket and disabled live-payment capability",
+      "status": "PASS"
+    },
+    {
+      "check": "QA staff/session revocation and clean authenticator enrollment for sandbox owner",
+      "status": "PASS"
+    },
+    {
+      "check": "Final owner password works, authenticator setup required, check session logged out and HTTPS healthy",
+      "status": "PASS"
+    }
+  ],
+  "mode": "deployed-sandbox-simulator",
+  "real_payments": false
+}

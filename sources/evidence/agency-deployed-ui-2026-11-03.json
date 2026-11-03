@@ -1,0 +1,11 @@
+{
+  "base_url": "https://playground-agent-sandbox-production.up.railway.app",
+  "status": "PASS",
+  "master": true,
+  "agent_roles": true,
+  "mobile": true,
+  "storefront": true,
+  "disabled_unverified_games": 3,
+  "page_errors": [],
+  "completed_at": "2026-11-03T11:07:05.535Z"
+}

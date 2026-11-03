@@ -22,7 +22,9 @@ The approved plan and both research documents are included alongside this file. 
 
 `AGENCY_BROWSER=true npm run test:agency`: **25 passed, 0 failed** (24 API/system scenarios plus one browser scenario). Runs the full Express application against disposable PostgreSQL WASM (PGlite), real HTTP sessions and Chromium. The report is written to `test-results/agency-system.json`; desktop/mobile screenshots are in the same directory. These T01–T24 identifiers belong to this executable suite and do not replace the separately numbered acceptance matrix in the approved plan.
 
-The GitHub workflow `.github/workflows/agency.yml` runs legacy regression plus the same agency suite against native PostgreSQL 18 and Chromium. A native CI pass must be observed before treating it as verified; workflow existence alone is not evidence.
+The GitHub workflow `.github/workflows/agency.yml` completed successfully on published commit `76fa31b7ac7fea70517886db96e85af9aef69e20`: **82 regression tests passed, 0 failed, 0 skipped**, plus **25 agency scenarios passed, 0 failed**, against native PostgreSQL 18 and Chromium. All five workflows succeeded. See [native CI evidence](evidence/agency-ci-2026-11-03.json) and [the actual run](https://github.com/9dbit/Playground/actions/runs/41622141420).
+
+The separately deployed Railway sandbox also passed authenticated HTTP exercises for both SHARED/net and SPLIT/gross tenants, including automatic and manual deposit, idempotency, supervisor approval, automatic payout, funding separation, immutable monthly close, CSV isolation and support tickets. Chromium verified the deployed master and agent dashboards, mobile layout and public storefront. See [deployment checkpoint](PLAYGROUND_AG_DEPLOYMENT_CHECKPOINT_2026-11-03.md) for results and access.
 
 The suite covers cross-tenant IDs, role/CSRF, duplicate and conflicting payments, pending/settled cash, reused bank references, invalid overrides, late payment and stock shortage, bound supervisor approval, timeout/reversal, threshold and split funding, signed game protocol, concurrent spend, monthly credits, CMS injection/rollback, session/IP revocation, journal invariants, close replay, legacy routes, fault rollback, restricted-player funds access, forged signatures/nonces, domain isolation, CSV scope and Chatvice merchant rejection. The worker scenario verifies automatic payment, independent settlement recovery after interruption, automatic payout and repeated-worker idempotency.
 
@@ -39,7 +41,7 @@ The suite covers cross-tenant IDs, role/CSRF, duplicate and conflicting payments
 | AG09 | CMS and verified host routing implemented. Hosting DNS/TLS provisioning needs the real domains. Arbitrary raw custom scripts are rejected; reviewed sandboxed vendor registry and analytics execution remain. |
 | AG10 | Functional operating dashboards, scoped export, exceptions, tickets and guidance implemented. Paginated large exports, notifications delivery, richer risk cases and complete player-limit lifecycle remain. |
 | AG11 | Embedding configuration and SOP fallback implemented. Live merchant mapping/domain verification and server-verified private identities across Chatvice endpoints remain. No private lookup is claimed. |
-| AG12 | Local API/browser simulation completed; native CI and isolated sandbox deployment are next gates. Native-game cutover, restore drill, production load/monitoring and live pilot are still required. |
+| AG12 | Local API/browser simulation, native PostgreSQL CI, isolated service/schema deployment and deployed HTTP/browser checks completed. Native-game cutover, restore drill, production load/monitoring and live pilot are still required. |
 
 ## Runtime configuration
 
@@ -57,4 +59,4 @@ Rollback for the new sandbox: stop its worker, preserve evidence/database, disco
 
 ## Publication status
 
-Feature-branch publication, a draft PR and a separate Railway sandbox were explicitly authorized on 2026-11-03. Native CI and deployment evidence will be recorded after their results are observed. Production cutover and real gateway activation are outside this sandbox release.
+Feature branch `feat/agent-platform-20261103` is published with [draft PR #18](https://github.com/9dbit/Playground/pull/18). The separate [agency sandbox](https://playground-agent-sandbox-production.up.railway.app/agents) reached Railway `SUCCESS` on 2026-11-03 at 10:51:05 UTC. The deployed application is pinned to the tested code commit `76fa31b7ac7fea70517886db96e85af9aef69e20`; subsequent evidence-only commits do not change the running build. Existing production services were not redeployed. See [release evidence and access instructions](PLAYGROUND_AG_DEPLOYMENT_CHECKPOINT_2026-11-03.md). Production cutover and real gateway activation are outside this sandbox release.

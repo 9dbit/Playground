@@ -1,6 +1,14 @@
 # Playground GameOps Control Center
 
-Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. Current release: **0.8.0 / Checkpoint 08**.
+Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. This feature branch adds the **0.17.0 agency sandbox** to the existing GameOps engine.
+
+## Agency sandbox
+
+- [Master dashboard](https://playground-agent-sandbox-production.up.railway.app/agents) and [agent dashboard](https://playground-agent-sandbox-production.up.railway.app/agency).
+- Public demonstrations: [shared gateway account](https://playground-agent-sandbox-production.up.railway.app/site/demo-shared) and [split deposit/disbursement accounts](https://playground-agent-sandbox-production.up.railway.app/site/demo-split).
+- [Release, access and deployed verification](sources/PLAYGROUND_AG_DEPLOYMENT_CHECKPOINT_2026-11-03.md), [implementation status](sources/PLAYGROUND_AG_IMPLEMENTATION_STATUS_2026-11-03.md), and [test results](sources/PLAYGROUND_AG_UAT_2026-11-03.md).
+
+The sandbox uses a separate service and database schema. Payments, payouts and coins are simulated. Native games remain gated pending their wallet-authority cutovers. Private Chatvice SSO and real payment-provider integration are not enabled.
 
 ## Application
 - Login: https://playground-admin-production.up.railway.app/login
@@ -42,7 +50,7 @@ Do not roll back to CP07 after account migration without first taking the app of
 
 `SESSION_SECRET` now encrypts authenticator material and protects recovery-code hashes. Do not rotate it without migrating those keys. Lost authenticators can use an unused recovery code; operator-assisted recovery when all codes are lost is not implemented yet.
 
-Native TOTP is implemented; OIDC, passkeys, KYC, external notification delivery, wallet/ledger, game adapters, recurring backup verification and job scheduling remain separate milestones. Real-money settlement, user impersonation and live win-rate manipulation are not supported.
+Native TOTP is implemented. This branch adds an agency ledger, cashier simulator, billing and worker; OIDC, passkeys, KYC, external notification delivery, native game cutovers and recurring backup verification remain separate milestones. Real-money settlement, user impersonation and live win-rate manipulation are not supported.
 
 ## Checkpoints
 - `sources/PLAYGROUND_CHECKPOINT_08.md`: security implementation, onboarding, acceptance coverage and remaining work.
