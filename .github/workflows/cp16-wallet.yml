@@ -1,0 +1,66 @@
+name: CP16 Source Wallet End-to-End
+on:
+  push:
+    branches: [feat/cp16-authoritative-wallet-20261103, main]
+  pull_request:
+    paths: ['engine/**','server.js','public/data*','tests/cp16*','tests/source-wallet*','.github/workflows/cp16-wallet.yml']
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: gameops_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_ephemeral_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gameops_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci_ephemeral_only@127.0.0.1:5432/gameops_ci
+      UNO_CP16_ROOT: ${{ github.workspace }}/uno-source
+      UNO_CP15_ROOT: ${{ github.workspace }}/uno-source
+      GAMEOPS_WALLET_KEYS: '[]'
+      GAMEOPS_ADDITIONAL_KEYS: '[]'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: 9dbit/uno-luck
+          ref: 2004e68bda6f114f03e63ae0c89007978ddf32af
+          path: uno-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: npm ci --no-audit --no-fund
+      - run: pip install -r uno-source/requirements.txt pytest==9.0.2 httpx==0.28.1 Pillow
+      - run: npm test | tee cp16-regression.log
+      - run: npm install --no-save playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: CP14 full-server transaction/validation regression
+        run: CP14_BROWSER=true node tests/cp14-server.cjs
+      - name: CP15 actual source data regression, wallet off
+        run: node tests/cp15-live.cjs
+      - name: CP16 source balances, commands, failure rollback and real browser
+        run: node tests/cp16-wallet-live.cjs
+      - name: Archive precise source and evidence, no database or credentials
+        if: always()
+        run: |
+          mkdir -p cp16-evidence
+          git archive --format=tar HEAD > cp16-evidence/admin-source.tar
+          git -C uno-source archive --format=tar HEAD app/source_wallet.py app/spin.py app/main.py app/round_outbox.py tests/test_source_wallet.py sources/CP16_SOURCE_WALLET.md > cp16-evidence/uno-wallet-source.tar
+          cp cp16-regression.log cp16-evidence/ || true
+          cp -R test-results cp16-evidence/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cp16-wallet-evidence
+          path: cp16-evidence/
+          retention-days: 14
