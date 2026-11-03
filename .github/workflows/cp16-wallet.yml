@@ -54,7 +54,7 @@ jobs:
           set -o pipefail
           npm test | tee cp16-regression.log
       - name: Source wallet regression (UNO)
-        run: python -m pytest -q uno-source/tests/test_wallet_link.py
+        run: cd uno-source && python -m pytest -q tests/test_wallet_link.py
       - run: npm install --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - name: Full CP14 real server regression
