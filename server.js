@@ -6,6 +6,7 @@ const path = require('node:path');
 const deep = require('./engine/deep-routes');
 const { createSecurity } = require('./engine/security');
 const { createBridge } = require('./engine/game-bridge');
+const {createSourceWallet}=require('./engine/source-wallet');
 const gameData = require('./engine/game-data');
 const virtualWallet=require('./engine/virtual-wallet');
 const parity=require('./engine/parity');
@@ -19,7 +20,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.15.0';
+const VERSION = '0.16.0';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -30,6 +31,7 @@ const security = createSecurity({ pool, master: SESSION_SECRET,
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
 const bridge = createBridge({ pool });
+const sourceWallet=createSourceWallet({pool});
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
 const safeInt = x => Number.isSafeInteger(x) && x >= 0 && x <= 1000000000000;
@@ -103,6 +105,7 @@ async function initDB() {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
   await bridge.init();
+  await sourceWallet.init();
   const conflicts=await publicContent.inspectConflicts(pool);
   console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }
@@ -224,6 +227,8 @@ app.get('/api/admin/deep/system/:name',route(async(req,res)=>{
 app.post('/api/v1/game-events',(req,res)=>res.status(410).json({error:'LEGACY_INGESTION_RETIRED',endpoint:'/api/v2/game-bridge'}));
 app.use('/api/v2/game-bridge',(req,res,next)=>{if(!limit('bridge:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
 bridge.mount(app);
+app.use('/api/v3/source-wallet',(req,res,next)=>{if(!limit('source-wallet:'+(req.ip||'unknown'),240))return res.status(429).json({error:'RATE_LIMITED'});next();});
+sourceWallet.mount(app);
 gameData.mount(app,{pool});
 deep.mount(app,{pool,audit});
 virtualWallet.mount(app,{pool,currentActor:security.currentActor});
