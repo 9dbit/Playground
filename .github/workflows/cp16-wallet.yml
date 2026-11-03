@@ -61,6 +61,8 @@ jobs:
         run: CP14_BROWSER=true node tests/cp14-server.cjs
       - name: Existing CP15 source round integration remains compatible
         run: node tests/cp15-live.cjs
+      - name: End-to-end authoritative virtual wallet and owner review
+        run: node tests/cp16-live.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
