@@ -7,6 +7,7 @@ const root=path.join(__dirname,'..','public');
 const account={id:'11111111-1111-4111-8111-111111111111',username:'qa_owner',displayName:'QA Owner',role:'owner',status:'active',mfaEnabled:false,passwordChangeRequired:true,setupRequired:true,csrf:'synthetic-qa-csrf',sessionId:'22222222-2222-4222-8222-222222222222',expiresAt:'2027-01-01T00:00:00Z'};
 const sessions=[{id:account.sessionId,current:true,created_at:'2026-11-02T01:00:00Z',last_seen:'2026-11-02T01:01:00Z',expires_at:'2026-11-02T09:00:00Z',ip:'127.0.0.1',user_agent:'Local browser QA'}];
 (async()=>{
+ let recoveryEnabled=true;
  const browser=await chromium.launch({headless:true});
  const report={suite:'CP08 browser UI with mocked API',checks:[],errors:[]};
  try{
@@ -17,7 +18,8 @@ const sessions=[{id:account.sessionId,current:true,created_at:'2026-11-02T01:00:
    const files={'/login':'login.html','/security':'security.html','/assets/login.js':'login.js','/assets/security-ui.js':'security-ui.js','/assets/security.css':'security.css'};
    if(files[p]){const f=files[p];return route.fulfill({status:200,body:fs.readFileSync(path.join(root,f)),contentType:f.endsWith('.html')?'text/html':f.endsWith('.js')?'application/javascript':'text/css'})}
    const body=req.method()==='GET'?{}:req.postDataJSON();let data={},status=200;
-   if(p==='/api/auth/login'){if(account.mfaEnabled&&!body.code){status=202;data={code:'MFA_REQUIRED',error:'Enter a code'}}else data={...account}}
+   if(p==='/api/auth/recovery-options')data={environmentCredentials:recoveryEnabled};
+   else if(p==='/api/auth/login'){if(account.mfaEnabled&&!body.code){status=202;data={code:'MFA_REQUIRED',error:'Enter a code'}}else data={...account}}
    else if(p==='/api/auth/session'||p==='/api/security/me')data={...account};
    else if(p==='/api/security/sessions')data={items:sessions};
    else if(p==='/api/security/admins')data={items:[{...account}],roles:['owner','operator','support','viewer']};
@@ -29,6 +31,16 @@ const sessions=[{id:account.sessionId,current:true,created_at:'2026-11-02T01:00:
    return route.fulfill({status,body:JSON.stringify(data),contentType:'application/json'});
   });
   await page.goto('http://127.0.0.1:8778/login');
+  await page.getByText('Lupa password atau username?',{exact:true}).click();
+  await page.locator('#recovery-help').getByText('ADMIN_PASSWORD',{exact:true}).waitFor();
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  fs.mkdirSync('test-results',{recursive:true});await page.screenshot({path:'test-results/login-recovery-mobile.png',fullPage:true});
+  report.checks.push('Railway recovery steps are available on mobile with no overflow');
+  recoveryEnabled=false;await page.reload();
+  assert.equal(await page.locator('#recovery-help code').count(),0);
+  report.checks.push('bootstrap-only services do not advertise environment password sync');
+  await page.setViewportSize({width:1440,height:1080});
   await page.locator('input[name=username]').fill('qa_owner');await page.locator('input[name=password]').fill('Initial synthetic password 123');
   await page.getByRole('button',{name:'Sign in'}).click();await page.waitForURL('**/security');await page.getByText('Step 1 of 2:',{exact:false}).waitFor();
   report.checks.push('temporary login redirects to security onboarding');

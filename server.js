@@ -15,23 +15,35 @@ const {transaction,RequestError}=require('./engine/transaction');
 const settingsSchema=require('./engine/settings-schema');
 const {readPlayers}=require('./engine/player-list');
 const publicContent=require('./engine/public-content');
+const {createAgency}=require('./engine/agency');
+const {mountOperations}=require('./engine/agency/operations');
+const {createContent:createAgencyContent}=require('./engine/agency/content');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.16.0';
+const VERSION = '0.17.1';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
 if (SESSION_SECRET.length < 32) throw new Error('Signing secrets are too short');
-const pool = new Pool({ connectionString: DATABASE_URL, max: 8, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
+const DATABASE_SCHEMA=process.env.DATABASE_SCHEMA||'';
+if(DATABASE_SCHEMA&&!/^agency_sandbox_[a-z0-9_]{1,40}$/.test(DATABASE_SCHEMA))throw new Error('DATABASE_SCHEMA must name an isolated agency_sandbox_ namespace');
+const pool = new Pool({ connectionString: DATABASE_URL,...(DATABASE_SCHEMA?{options:'-c search_path='+DATABASE_SCHEMA+',pg_catalog'}:{}), max: 8, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const security = createSecurity({ pool, master: SESSION_SECRET,
   bootstrapUser: process.env.ADMIN_USERNAME, bootstrapPassword: process.env.ADMIN_PASSWORD,
+  runtimeCredentialSync: process.env.ADMIN_CREDENTIALS_SYNC === 'true', runtimeCredentialRevision: process.env.ADMIN_CREDENTIALS_REVISION || '',
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
 const bridge = createBridge({ pool });
 const wallet=sourceWallet.createWallet({pool});
+const publicOrigin=process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN?'https://'+process.env.RAILWAY_PUBLIC_DOMAIN:'http://localhost:'+PORT);
+const chatvice={origin:process.env.AGENCY_CHATVICE_ORIGIN||'',masterMerchant:process.env.AGENCY_CHATVICE_MASTER_MERCHANT||'',tenants:JSON.parse(process.env.AGENCY_CHATVICE_TENANT_MERCHANTS||'{}')};
+if(chatvice.origin){if(new URL(chatvice.origin).protocol!=='https:')throw new Error('Chatvice requires HTTPS');chatvice.origin=new URL(chatvice.origin).origin;}
+const agency=createAgency({pool,security,master:SESSION_SECRET,publicDir:path.join(__dirname,'public'),production:PRODUCTION,
+ gameKeys:JSON.parse(process.env.AGENCY_GAME_KEYS||'[]'),simulationWorker:process.env.AGENCY_SIMULATION_WORKER==='true',chatvice});
+const agencyContent=createAgencyContent({pool,agency,publicOrigin,chatvice});
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
 const safeInt = x => Number.isSafeInteger(x) && x >= 0 && x <= 1000000000000;
@@ -59,6 +71,7 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  if(chatvice.origin&&['/agents','/agency','/engine'].includes(req.path))res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${chatvice.origin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${chatvice.origin} data:; connect-src 'self' ${chatvice.origin}; frame-src ${chatvice.origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
@@ -100,11 +113,13 @@ CREATE INDEX IF NOT EXISTS gameops_audit_time_idx ON gameops_audit(created_at DE
 CREATE INDEX IF NOT EXISTS gameops_players_last_seen_idx ON gameops_players(last_seen DESC);
 `;
 async function initDB() {
+  if(DATABASE_SCHEMA)await pool.query('CREATE SCHEMA IF NOT EXISTS '+DATABASE_SCHEMA);
   await pool.query(ddl); await deep.ensureSchema(pool); await virtualWallet.ensureSchema(pool); await security.init(); await adminOps.ensureSchema(pool);
   for (const [name, slug, code] of [['Skygate 5000','skygate-5000','SK'],['UNO LUCK','uno-luck','UN'],['Mahjong Wild','mahjong-wild','MW']]) {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
   await bridge.init(); await wallet.init();
+  await agency.init();
   const conflicts=await publicContent.inspectConflicts(pool);
   console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }
@@ -112,6 +127,7 @@ app.get('/health', route(async (req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'playground-gameops', version: VERSION, db: 'connected', time: iso() }); }
   catch { res.status(503).json({ status: 'degraded', db: 'unavailable' }); }
 }));
+app.use(agencyContent.domainRouter);
 security.mount(app);
 app.get('/', (req, res) => res.redirect('/engine'));
 app.get('/engine', security.protectedPage('control.html'));
@@ -235,6 +251,9 @@ virtualWallet.mount(app,{pool,currentActor:security.currentActor});
 parity.mount(app,{pool});
 adminOps.mount(app,{pool});
 publicContent.mount(app,{pool});
+agency.mount(app);
+agencyContent.mount(app);
+mountOperations(app,{pool,agency,chatvice});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
 app.use(security.errorHandler);
@@ -245,9 +264,13 @@ app.use((err,req,res,next)=>{
  const status=err.type==='entity.too.large'?413:err.type==='entity.parse.failed'||err.code==='22P02'?400:err.code==='23505'?409:500;
  res.status(status).json({error:status===400?'Invalid request':status===409?'Record conflicts with existing data':'Request could not be completed'});
 });
-initDB().then(()=>{
+if(require.main===module)initDB().then(()=>{
  const server=app.listen(PORT,'0.0.0.0',()=>console.log('Playground GameOps '+VERSION+' listening on '+PORT+' at '+iso()));
  const stopScheduler=adminOps.startScheduler(pool,{onError:e=>console.error('[maintenance-job]',e.code||e.message)});
- const stop=()=>{stopScheduler();server.close(()=>pool.end().then(()=>process.exit(0)));setTimeout(()=>process.exit(1),10000).unref();};
+ const stopAgency=agency.startWorker();
+ let publishing=false;
+ const publisher=setInterval(async()=>{if(publishing)return;publishing=true;try{await agencyContent.tick()}catch(e){console.error('[agency-publisher]',e.code||e.message)}finally{publishing=false}},30000);publisher.unref();
+ const stop=()=>{stopScheduler();stopAgency();clearInterval(publisher);server.close(()=>pool.end().then(()=>process.exit(0)));setTimeout(()=>process.exit(1),10000).unref();};
  process.once('SIGTERM',stop);process.once('SIGINT',stop);
 }).catch(e=>{console.error('Database startup failed:',e.code||e.message);process.exit(1);});
+module.exports={app,pool,initDB,agency,agencyContent,security};
