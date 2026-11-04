@@ -5,6 +5,10 @@ on:
   pull_request:
     paths:
       - 'engine/agency/**'
+      - 'engine/security*'
+      - 'engine/runtime-credentials.js'
+      - 'tests/security*'
+      - 'public/login*'
       - 'public/agency*'
       - 'tests/agency*'
       - 'server.js'

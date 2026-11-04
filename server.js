@@ -23,7 +23,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PRODUCTION = process.env.NODE_ENV === 'production';
-const VERSION = '0.17.0';
+const VERSION = '0.17.1';
 for (const [key, value] of Object.entries({ DATABASE_URL, SESSION_SECRET })) {
   if (!value) throw new Error('Missing required environment variable: ' + key);
 }
@@ -33,6 +33,7 @@ if(DATABASE_SCHEMA&&!/^agency_sandbox_[a-z0-9_]{1,40}$/.test(DATABASE_SCHEMA))th
 const pool = new Pool({ connectionString: DATABASE_URL,...(DATABASE_SCHEMA?{options:'-c search_path='+DATABASE_SCHEMA+',pg_catalog'}:{}), max: 8, idleTimeoutMillis: 30000, connectionTimeoutMillis: 10000 });
 const security = createSecurity({ pool, master: SESSION_SECRET,
   bootstrapUser: process.env.ADMIN_USERNAME, bootstrapPassword: process.env.ADMIN_PASSWORD,
+  runtimeCredentialSync: process.env.ADMIN_CREDENTIALS_SYNC === 'true', runtimeCredentialRevision: process.env.ADMIN_CREDENTIALS_REVISION || '',
   publicOrigin: process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? 'https://' + process.env.RAILWAY_PUBLIC_DOMAIN : PRODUCTION ? 'https://playground-admin-production.up.railway.app' : 'http://localhost:' + PORT),
   production: PRODUCTION, publicDir: path.join(__dirname, 'public') });
 const bridge = createBridge({ pool });

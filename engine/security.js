@@ -4,6 +4,7 @@ const path = require('node:path');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const C = require('./security-crypto');
 const policy = require('./security-policy');
+const { syncRuntimeCredentials } = require('./runtime-credentials');
 const COOKIE = 'gameops_session';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,63}$/;
@@ -40,8 +41,14 @@ CREATE TABLE IF NOT EXISTS gameops_auth_buckets (
  key text PRIMARY KEY, hits integer NOT NULL, expires_at timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS gameops_auth_buckets_expiry_idx ON gameops_auth_buckets(expires_at);
+CREATE TABLE IF NOT EXISTS gameops_runtime_credentials (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+ admin_id uuid NOT NULL UNIQUE REFERENCES gameops_admin_accounts(id),
+ fingerprint text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+);
 `;
-function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, publicOrigin, production = false, publicDir }) {
+function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, publicOrigin, production = false, publicDir,
+  runtimeCredentialSync = false, runtimeCredentialRevision = '' }) {
   const vault = C.encryption(master), actorContext = new AsyncLocalStorage();
   let dummyHash;
   const origin = new URL(publicOrigin).origin;
@@ -56,7 +63,7 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
       [actor, action, String(resource), JSON.stringify(details)]);
   }
   async function init() {
-    await transaction(async db => {
+    const credentialStatus = await transaction(async db => {
       await db.query('SELECT pg_advisory_xact_lock(812083001)');
       await db.query(ddl);
       const exists = await db.query('SELECT 1 FROM gameops_admin_accounts LIMIT 1');
@@ -70,7 +77,10 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
       // Existing CP07 tables remain intact. Its signed cookies are never accepted by CP08.
       await db.query("DELETE FROM gameops_admin_sessions WHERE expires_at < now() OR last_seen < now()-interval '30 minutes'");
       await db.query('DELETE FROM gameops_auth_buckets WHERE expires_at < now()');
+      return syncRuntimeCredentials(db, { enabled: runtimeCredentialSync, username: bootstrapUser,
+        password: bootstrapPassword, master, revision: runtimeCredentialRevision });
     });
+    if (runtimeCredentialSync) console.info('[security-runtime-credentials]', credentialStatus);
     dummyHash = await C.passwordHash(crypto.randomBytes(24).toString('base64url'));
   }
   function tokenFrom(req) {
@@ -168,6 +178,9 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     return a;
   }
   function mount(app) {
+    app.get('/api/auth/recovery-options', (_req, res) => {
+      res.set('Cache-Control', 'no-store').json({ environmentCredentials: runtimeCredentialSync });
+    });
     app.get('/login', wrap(async (req, res) => {
       const a = await session(req); return a ? res.redirect(full(a) ? '/engine' : '/security') : res.sendFile(path.join(publicDir, 'login.html'));
     }));

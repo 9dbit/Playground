@@ -1,5 +1,7 @@
 # Playground Agency — publikasi dan sandbox, 3 November 2026
 
+> Pembaruan 5 November: v0.17.1 menambahkan sinkronisasi kredensial master lewat Railway. Informasi deployment di bawah adalah checkpoint v0.17.0. Untuk perubahan username/password dan lupa password, lihat [panduan pemulihan terbaru](PLAYGROUND_MASTER_ACCESS_RECOVERY_2026-11-05.md).
+
 Branch `feat/agent-platform-20261103` sudah dipublikasikan dan [PR #18](https://github.com/9dbit/Playground/pull/18) berstatus **draft**. Sandbox terpisah sudah online dan lolos pengujian HTTP serta browser. Rilis ini menyelesaikan fondasi operasional dalam mode simulasi; integrasi native game, gateway nyata dan Chatvice privat masih memiliki pekerjaan tersisa.
 
 ## Deployment yang diverifikasi
@@ -37,7 +39,7 @@ Deployment `playground-admin` tetap `893318cf-f996-4cd7-b4ca-b8a4ab701791`; serv
 
 Password tidak disimpan di GitHub. Akun master dan kedua owner siap untuk enrollment authenticator pribadi. Login master mengarahkan ke Security Center sampai enrollment selesai. Simpan recovery code master secara privat. Staff `qa_supervisor` sudah dinonaktifkan dan sesi pengujiannya ditolak. Authenticator sementara master telah direset dan password akhir diverifikasi melalui login baru, lalu sesi pemeriksaan ditutup.
 
-Password akun disimpan dalam database. Nilai environment hanya dipakai untuk bootstrap master saat tabel kosong; mengubah Variables saja tidak mereset password akun. Variabel `DEMO_*` menyediakan kredensial awal untuk handoff, bukan mekanisme autentikasi aplikasi. Jika password diganti melalui aplikasi, perbarui catatan akses privat tersebut.
+Password akun disimpan dalam database. Pada v0.17.0, nilai environment hanya dipakai untuk bootstrap master saat tabel kosong; mulai v0.17.1, mode `ADMIN_CREDENTIALS_SYNC=true` dapat menyinkronkan perubahan kredensial master saat deploy. Variabel `DEMO_*` menyediakan kredensial awal owner agen untuk handoff, bukan mekanisme autentikasi atau reset akun agen. Jika password diganti melalui aplikasi, perbarui catatan akses privat tersebut.
 
 ## Hasil verifikasi
 

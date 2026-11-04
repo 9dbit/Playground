@@ -984,7 +984,7 @@ async function main() {
     async () => {
       assert.equal(
         (await ok("/health", "GET", undefined, null)).version,
-        "0.17.0",
+        require("../package.json").version,
       );
       assert.equal((await req("/agents")).status, 200);
       assert.equal((await req("/agency", "GET", undefined, null)).status, 200);

@@ -1,6 +1,6 @@
 # Playground GameOps Control Center
 
-Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. This feature branch adds the **0.17.0 agency sandbox** to the existing GameOps engine.
+Original multi-game administration console inspired by the structure of the Xaxino reference. Node.js 20+, Express and PostgreSQL. This feature branch provides the **0.17.1 agency sandbox** and opt-in master credential recovery through service variables.
 
 ## Agency sandbox
 
@@ -19,7 +19,9 @@ The sandbox uses a separate service and database schema. Payments, payouts and c
 ## First login after Checkpoint 08
 Existing Checkpoint 07 sessions are invalid. Sign in with the existing owner credential, change the temporary password, and verify an authenticator before entering the dashboard. Save the eight single-use recovery codes privately. Enrollment uses a manual time-based setup key, not a third-party QR service.
 
-The environment username/password only seed the first owner when the account table is empty. Changing environment variables later does not reset that owner's stored password. Never share passwords, setup keys or recovery codes in GitHub or chat.
+By default, the environment username/password only seed the first owner when the account table is empty. With `ADMIN_CREDENTIALS_SYNC=true`, changing `ADMIN_USERNAME` or `ADMIN_PASSWORD` and deploying updates the same original owner, revokes that owner's sessions and preserves the registered authenticator. Unchanged variables do not overwrite a password changed inside Security Center. Username: 3–64 lowercase letters/digits/`.`/`_`/`-`, beginning with a letter or digit. Password: 15–128 characters. The login page's “Lupa password atau username?” section explains the active recovery mode.
+
+If the environment values are unchanged but must be reapplied, change the optional `ADMIN_CREDENTIALS_REVISION` marker and deploy. This is not a password and is applied once per configuration change. Recovery affects the original master only; it does not rename another user, reset MFA or enable a disabled account. See [the recovery guide](sources/PLAYGROUND_MASTER_ACCESS_RECOVERY_2026-11-05.md). Keep passwords, setup keys and recovery codes private.
 
 ## Features
 - Deep sidebar navigation and 19 System Settings modules
