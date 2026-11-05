@@ -35,13 +35,27 @@
     script.src =
       origin.origin +
       "/api/widget/chatvice.js?merchant=" +
-      encodeURIComponent(config.merchant);
+      encodeURIComponent(config.merchant) +
+      (config.version ? "&v=" + encodeURIComponent(config.version) : "");
     script.async = true;
     script.referrerPolicy = "origin";
     script.onerror = () => {
       clear();
     };
     document.body.appendChild(script);
+  }
+  // Master support is available independently of the selected agency.
+  // Credential/setup pages deliberately do not include this loader.
+  const masterPaths = ["/engine", "/engine-v1", "/integrations", "/data", "/wallet", "/agents"];
+  if (masterPaths.includes(location.pathname.replace(/\/$/, ""))) {
+    fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((account) => {
+        if (!account || account.setupRequired) return;
+        load({ origin: "https://chatvice.app", merchant: "m_36f76fcbe11167ed", version: "1793889257" });
+      })
+      .catch(() => {});
+    return;
   }
   addEventListener("agency:help-context", (e) => load(e.detail));
   addEventListener("agency:logout", clear);

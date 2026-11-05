@@ -1388,6 +1388,17 @@ async function main() {
         });
         try {
           const ctx = await browser.newContext();
+          // Keep CI deterministic; the real provider is checked separately.
+          const widgetRequests = [];
+          await ctx.route("https://chatvice.app/**", async route => {
+            const url = new URL(route.request().url());
+            if (url.pathname === "/api/widget/chatvice.js") {
+              widgetRequests.push(url.href);
+              return route.fulfill({ contentType: "application/javascript", body:
+                'const frame=document.createElement("iframe");frame.id="chatvice-widget-frame";frame.src="https://chatvice.app/widget/m_36f76fcbe11167ed";document.body.append(frame);' });
+            }
+            return route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Support fixture</title>Support" });
+          });
           const a = creds.get("master"),
             [name, value] = a.cookie.split("=");
           await ctx.addCookies([
@@ -1396,6 +1407,28 @@ async function main() {
           const page = await ctx.newPage();
           const errors = [];
           page.on("pageerror", (e) => errors.push(e.message));
+          for (const masterPath of ["/engine", "/engine-v1", "/integrations", "/data", "/wallet", "/agents"]) {
+            const response = await page.goto(base + masterPath);
+            assert.equal(response.status(), 200);
+            await page.locator("#chatvice-widget-frame").waitFor();
+            const policy = response.headers()["content-security-policy"];
+            assert.match(policy, /connect-src[^;]*wss:\/\/chatvice\.app/);
+            assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline/);
+            await page.evaluate(() => dispatchEvent(new CustomEvent("agency:help-context", { detail: null })));
+            assert.equal(await page.locator("#chatvice-widget-frame").count(), 1);
+          }
+          assert.equal(widgetRequests.length, 6);
+          for (const url of widgetRequests) assert.equal(url, "https://chatvice.app/api/widget/chatvice.js?merchant=m_36f76fcbe11167ed&v=1793889257");
+          for (const privatePath of ["/security", "/agency"]) {
+            const response = await page.goto(base + privatePath);
+            assert.equal(await page.locator("#playground-chatvice-script").count(), 0);
+            assert.doesNotMatch(response.headers()["content-security-policy"], /chatvice\.app/);
+          }
+          const anonymous = await browser.newPage();
+          await anonymous.goto(base + "/engine");
+          assert.equal(new URL(anonymous.url()).pathname, "/login");
+          assert.equal(await anonymous.locator("#playground-chatvice-script").count(), 0);
+          await anonymous.close();
           await page.goto(base + "/agents");
           await page
             .getByRole("heading", { name: "Ringkasan", exact: true })
@@ -1430,7 +1463,7 @@ async function main() {
             .getByRole("heading", { name: "Masuk akun", exact: true })
             .waitFor();
           assert.deepEqual(errors, []);
-          return { pageErrors: 0, viewports: [1440, 390] };
+          return { pageErrors: 0, viewports: [1440, 390], masterChatvicePages: 6, masterMerchantIsolated: true };
         } finally {
           await browser.close();
         }

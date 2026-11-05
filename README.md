@@ -10,6 +10,8 @@ Original multi-game administration console inspired by the structure of the Xaxi
 
 The sandbox uses a separate service and database schema. Payments, payouts and coins are simulated. Native games remain gated pending their wallet-authority cutovers. Private Chatvice SSO and real payment-provider integration are not enabled.
 
+Master operational pages (`/engine`, `/engine-v1`, `/integrations`, `/data`, `/wallet`, `/agents`) load the authorized Chatvice widget for `m_36f76fcbe11167ed`, version `1793889257`, after confirming a fully enrolled master session. The launcher works independently of agency selection. Login and Security Center do not load third-party scripts; agent and player widgets retain their separate tenant configuration. The master widget uses standard Chatvice visitor sessions, with no account data or private SSO supplied by Playground.
+
 ## Application
 - Login: https://playground-admin-production.up.railway.app/login
 - Health: https://playground-admin-production.up.railway.app/health
