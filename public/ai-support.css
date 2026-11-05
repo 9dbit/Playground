@@ -1,0 +1,15 @@
+#playground-ai-support{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));z-index:9000;font:14px/1.4 system-ui,-apple-system,sans-serif;color:#f5f5fa}
+#playground-ai-support [hidden]{display:none!important}
+#playground-ai-trigger{display:flex;align-items:center;gap:9px;min-height:48px;padding:12px 19px;border:0;border-radius:999px;background:#4939f5;color:#fff;font:600 14px/1.2 system-ui,sans-serif;box-shadow:0 8px 32px #0004;cursor:pointer}
+#playground-ai-trigger span{font-size:20px}
+#playground-ai-support button:focus-visible{outline:3px solid #b7b0ff;outline-offset:3px}
+#playground-ai-trigger:disabled{opacity:.65;cursor:wait}
+#playground-ai-panel{display:flex;flex-direction:column;position:absolute;right:0;bottom:60px;width:min(420px,calc(100vw - 32px));height:min(660px,calc(100dvh - 108px));overflow:hidden;border-radius:22px;background:#17171e;box-shadow:0 16px 64px #0006}
+#playground-ai-panel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;background:#20202a;color:#fff}
+#playground-ai-panel strong{font-size:15px}
+#playground-ai-panel small{display:block;font-size:12px;color:#b7b5c6;margin-top:3px}
+#playground-ai-panel>header button{flex:0 0 36px;width:36px;height:36px;border:0;border-radius:50%;background:#ffffff12;color:#fff;font-size:25px;cursor:pointer}
+#playground-ai-panel>.ai-support-note{flex:none;font-size:11px;color:#d2cedf;margin:0;padding:10px 16px;background:#232130}
+#playground-ai-panel>.ai-support-status{margin:12px 16px;color:#d2cedf;font-size:13px}
+#playground-ai-panel>iframe{flex:1;min-height:0;width:100%;border:0;background:#17171e}
+@media(max-width:480px){#playground-ai-support{right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom))}#playground-ai-panel{width:calc(100vw - 24px);height:min(660px,calc(100dvh - 96px));bottom:60px;border-radius:18px}#playground-ai-trigger{min-height:46px;padding:11px 16px}}

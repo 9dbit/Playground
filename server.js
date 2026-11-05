@@ -15,6 +15,7 @@ const {transaction,RequestError}=require('./engine/transaction');
 const settingsSchema=require('./engine/settings-schema');
 const {readPlayers}=require('./engine/player-list');
 const publicContent=require('./engine/public-content');
+const aiSupport = require('./engine/ai-support');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
@@ -58,7 +59,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', aiSupport.contentSecurityPolicy(req.path));
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
@@ -120,9 +121,12 @@ app.get('/data', security.protectedPage('data.html'));
 app.get('/wallet',security.protectedPage('wallet.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
+app.get('/assets/ai-support.js', security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ai-support.js')));
+app.get('/assets/ai-support.css', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ai-support.css')));
 for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js','data-ui.js','data-nav.js','wallet-ui.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 for (const filename of ['control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
+app.get('/api/admin/ai-support', aiSupport.configHandler);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([
     pool.query('SELECT count(*)::int AS count,count(*) FILTER (WHERE status=$1)::int AS active FROM gameops_games', ['Active']),

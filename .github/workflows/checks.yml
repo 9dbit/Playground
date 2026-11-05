@@ -47,6 +47,7 @@ jobs:
       - run: node tests/parity-ui.cjs
       - run: node tests/admin-operations-ui.cjs
       - run: node tests/game-detail-ui.cjs
+      - run: node tests/ai-support-ui.cjs
       - uses: actions/upload-artifact@v4
         if: success()
         with:
