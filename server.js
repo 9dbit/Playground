@@ -71,7 +71,7 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
-  const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?chatvice.origin:'';
+  const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?'https://chatvice.app':'';
   if(widgetOrigin)res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${widgetOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${widgetOrigin} https://playground-agent-frontend-production.up.railway.app data: blob:; connect-src 'self' ${widgetOrigin} ${widgetOrigin.replace(/^https:/,'wss:')}; frame-src ${widgetOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
   if(req.path.replace(/\/$/,'')==='/agency'&&!widgetOrigin)res.setHeader('Content-Security-Policy',res.getHeader('Content-Security-Policy').replace("img-src 'self'","img-src 'self' https://chatvice.app https://playground-agent-frontend-production.up.railway.app"));
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');

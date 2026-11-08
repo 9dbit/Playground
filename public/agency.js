@@ -1016,9 +1016,10 @@
                 "color",
               ) +
               field(
-                "chatvice_merchant",
-                "Merchant Chatvice",
-                c?.draft.chatvice_merchant || "",
+                "chatvice_embed",
+                "Paste embed script Chatvice (kosongkan untuk melepas widget)",
+                c?.draft.chatvice_merchant ? '<script src="https://chatvice.app/api/widget/chatvice.js?merchant=' + c.draft.chatvice_merchant + '" async></script>' : "",
+                "textarea",
               ) +
               field(
                 "chatvice_enabled",
@@ -1027,7 +1028,7 @@
                 "select",
                 [
                   ["false", "Nonaktif"],
-                  ["true", "Aktif jika integrasi tersedia"],
+                  ["true", "Aktif setelah Publish"],
                 ],
               ),
             async (p) => {
@@ -1043,6 +1044,8 @@
             },
           );
           saveBanner = bannerEditor();
+          const embed = $('#modal [name="chatvice_embed"]');
+          embed.addEventListener('input', () => { $('#modal [name="chatvice_enabled"]').value = embed.value.trim() ? 'true' : 'false'; });
         };
         b.querySelector('[data-action="new-content"]').onclick = () =>
           edit(null);
@@ -1058,11 +1061,17 @@
               form(
                 "Publish halaman",
                 field("at", "Jadwal (kosong = sekarang)", "", "datetime-local"),
-                (p) =>
-                  api("/content/" + c.id + "/publish", "POST", {
+                async (p) => {
+                  const result = await api("/content/" + c.id + "/publish", "POST", {
                     expected_version: c.version,
                     ...(p.at ? { at: new Date(p.at).toISOString() } : {}),
-                  }),
+                  });
+                  if (!master) {
+                    const help = await api("/help");
+                    dispatchEvent(new CustomEvent("agency:help-context", {detail: help.chatvice}));
+                  }
+                  return result;
+                },
               );
             }),
         );

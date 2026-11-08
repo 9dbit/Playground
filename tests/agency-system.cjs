@@ -1420,6 +1420,20 @@ async function main() {
     assert.equal((await req('/api/agency/players/'+PA.id,'GET',undefined,'ownerB')).status,404);
     return {stake:'1000',payout:'1500',playerNet:'500',scoped:true};
   });
+  await check("CHATVICE_EMBED", "Official embed is parsed, published and removable without storing executable HTML", async () => {
+    const {validate}=require('../engine/agency/content');
+    const embed='<!-- Chatvice Chat Widget -->\n<script src="https://chatvice.app/api/widget/chatvice.js?merchant=m_1234567890abcdef&v=123" async></script>';
+    const content={title:'Chatvice QA',chatvice_embed:embed,chatvice_enabled:true};
+    const parsed=validate(content);assert.equal(parsed.chatvice_merchant,'m_1234567890abcdef');assert.equal(parsed.chatvice_embed,undefined);
+    for(const bad of [embed.replace('chatvice.app','tawk.to'),embed+'<script>alert(1)</script>',embed.replace(' async',' onload="alert(1)"'),embed.replace('merchant=','merchant=x&merchant=')]) assert.throws(()=>validate({...content,chatvice_embed:bad}));
+    let c=await ok('/api/agency/content/chatvice-qa','PUT',{content,expected_version:0},'marketingA');
+    await ok('/api/agency/content/'+c.id+'/publish','POST',{expected_version:c.version},'marketingA');
+    const page=await req('/site/'+A.slug+'/p/chatvice-qa','GET',undefined,null);
+    assert.ok(page.text.includes('data-chatvice-merchant="m_1234567890abcdef"'));
+    c=await ok('/api/agency/content/chatvice-qa','PUT',{content:{title:'Chatvice QA',chatvice_embed:'',chatvice_enabled:false},expected_version:c.version},'marketingA');
+    await ok('/api/agency/content/'+c.id+'/publish','POST',{expected_version:c.version},'marketingA');
+    assert.ok(!(await req('/site/'+A.slug+'/p/chatvice-qa','GET',undefined,null)).text.includes('data-chatvice-merchant='));
+  });
   await check("STOREFRONT", "64COR bootstrap, published manifest and player tenant binding", async () => {
     const {ensure64cor}=require('../engine/agency/storefront');
     const t=await ensure64cor(pool);assert.equal((await ensure64cor(pool)).id,t.id);
@@ -1486,7 +1500,7 @@ async function main() {
           for (const privatePath of ["/security", "/agency"]) {
             const response = await page.goto(base + privatePath);
             assert.equal(await page.locator("#playground-chatvice-script").count(), 0);
-            assert.doesNotMatch(response.headers()["content-security-policy"], /script-src[^;]*chatvice\.app/);
+            if (privatePath !== "/agency") assert.doesNotMatch(response.headers()["content-security-policy"], /script-src[^;]*chatvice\.app/);
           }
           const anonymous = await browser.newPage();
           await anonymous.goto(base + "/engine");

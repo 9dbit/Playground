@@ -37,6 +37,8 @@ function validate(p) {
     "robots",
     "og_image",
     "accent",
+    "chatvice_configured",
+    "chatvice_embed",
     "chatvice_merchant",
     "chatvice_enabled",
     "analytics_id",
@@ -44,6 +46,20 @@ function validate(p) {
   ];
   if (Object.keys(p).some((k) => !allowed.includes(k)))
     fail(400, "Field konten tidak dikenal");
+  let merchant = String(p.chatvice_merchant || "");
+  if (Object.hasOwn(p, "chatvice_embed")) {
+    const embed = String(p.chatvice_embed || "").trim();
+    merchant = "";
+    if (embed) {
+      const match = /^(?:<!-- Chatvice Chat Widget -->\s*)?<script\s+src=["']([^"']+)["']\s*(?:async\s*)?><\/script>$/i.exec(embed);
+      if (!match || embed.length > 2000) fail(400, "Paste embed script resmi Chatvice saja");
+      let u;
+      try { u = new URL(match[1].replace(/&amp;/g, "&")); } catch { fail(400, "URL Chatvice tidak valid"); }
+      if (u.origin !== "https://chatvice.app" || u.pathname !== "/api/widget/chatvice.js" || u.username || u.password || u.hash || u.searchParams.getAll("merchant").length !== 1 || [...u.searchParams.keys()].some(k => !["merchant", "v"].includes(k))) fail(400, "Hanya embed resmi Chatvice yang didukung");
+      merchant = u.searchParams.get("merchant") || "";
+      if (!/^m_[a-f0-9]{16}$/i.test(merchant)) fail(400, "Merchant Chatvice tidak valid");
+    }
+  }
   const out = {
     title: text(p.title, 160),
     link_url: url(p.link_url),
@@ -54,8 +70,9 @@ function validate(p) {
     canonical: url(p.canonical, false),
     robots: p.robots === "noindex" ? "noindex, nofollow" : "index, follow",
     accent: p.accent || "#7759ed",
-    chatvice_enabled: p.chatvice_enabled === true,
-    chatvice_merchant: String(p.chatvice_merchant || ""),
+    chatvice_configured: Object.hasOwn(p, "chatvice_embed") || p.chatvice_configured === true,
+    chatvice_enabled: p.chatvice_enabled === true && !!merchant,
+    chatvice_merchant: merchant,
     analytics_id: String(p.analytics_id || ""),
   };
   if (!/^#[0-9a-f]{6}$/i.test(out.accent)) fail(400, "Warna tidak valid");
@@ -122,14 +139,8 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
       if (!found.rowCount) fail(400, "Banner tidak ditemukan");
     }
     if (p.chatvice_enabled) {
-      const tenant = (
-        await db.query("SELECT slug FROM agency_tenants WHERE id=$1", [t])
-      ).rows[0];
-      if (
-        !chatvice.origin ||
-        chatvice.tenants?.[tenant.slug]?.public !== p.chatvice_merchant
-      )
-        fail(409, "Merchant Chatvice publik harus dipetakan oleh Playground");
+      if (!/^m_[a-f0-9]{16}$/i.test(p.chatvice_merchant))
+        fail(409, "Gunakan Merchant ID dari embed resmi Chatvice");
     }
     if (!p.canonical) return;
     const host = new URL(p.canonical).hostname;
@@ -480,16 +491,16 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
           c.canonical ||
           siteURL + (req.params.page ? "/p/" + req.params.page : "");
       const chat =
-        !!chatvice.origin && c.chatvice_enabled && c.chatvice_merchant;
+        c.chatvice_enabled && c.chatvice_merchant;
       const chatAttrs = chat
         ? ' data-chatvice-origin="' +
-          escape(chatvice.origin) +
+          escape("https://chatvice.app") +
           '" data-chatvice-merchant="' +
           escape(c.chatvice_merchant) +
           '"'
         : "";
       {
-        const origin = chat ? new URL(chatvice.origin).origin : "";
+        const origin = chat ? "https://chatvice.app" : "";
         res.set(
           "Content-Security-Policy",
           `default-src 'self'; script-src 'self' ${origin}; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; frame-src ${origin || "\'none\'"}; connect-src 'self' ${origin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,

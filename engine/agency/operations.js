@@ -54,16 +54,17 @@ function mountOperations(app, { pool, agency, chatvice = {} }) {
           ])
         ).rows[0];
         if (!t) fail(404, "Agen tidak ditemukan");
+        const home = req.agency ? (await pool.query("SELECT published FROM agency_content WHERE tenant_id=$1 AND slug='home'", [agency.scope(req)])).rows[0]?.published : null;
         const merchant = req.agency
-          ? chatvice.tenants?.[t.slug]?.staff
+          ? (home?.chatvice_configured ? (home.chatvice_enabled ? home.chatvice_merchant : null) : chatvice.tenants?.[t.slug]?.staff)
           : chatvice.masterMerchant;
         res.json({
           version: "2026-11-03.1",
           guide,
           chatvice:
-            merchant && chatvice.origin
+            merchant
               ? {
-                  origin: chatvice.origin,
+                  origin: "https://chatvice.app",
                   merchant,
                   audience: req.agency ? "agent-sop" : "master-sop",
                   privateLookup: false,
