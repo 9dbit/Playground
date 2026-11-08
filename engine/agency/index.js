@@ -172,6 +172,19 @@ function createAgency({
       return { tenant: t, owner: s };
     });
   }
+  async function playerResults(t, player = null) {
+    return (await pool.query(`SELECT player_id,
+      count(*)::int AS settled_rounds,
+      COALESCE(sum(stake),0)::text AS stake,
+      COALESCE(sum(payout),0)::text AS payout,
+      COALESCE(sum(payout-stake),0)::text AS net,
+      count(*) FILTER(WHERE payout>stake)::int AS wins,
+      count(*) FILTER(WHERE payout<stake)::int AS losses,
+      count(*) FILTER(WHERE payout=stake)::int AS draws
+      FROM agency_rounds WHERE tenant_id=$1 AND state='settled' AND ($2::uuid IS NULL OR player_id=$2)
+      GROUP BY player_id`,[t,player])).rows;
+  }
+  const emptyPlayerResults = () => ({settled_rounds:0,stake:'0',payout:'0',net:'0',wins:0,losses:0,draws:0});
   async function overview(tid, privateData = true) {
     const t = (
       await pool.query("SELECT * FROM agency_tenants WHERE id=$1", [tid])
@@ -466,14 +479,10 @@ function createAgency({
         prefix + "/players",
         wrap(async (req, res) => {
           allow(req, "players.read");
-          res.json({
-            items: (
-              await pool.query(
-                "SELECT id,username,display_name,status,created_at FROM agency_players WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",
-                [scope(req)],
-              )
-            ).rows,
-          });
+          const a=actor(req), t=scope(req), reports=a.kind==='master'||roles[a.role].includes('reports');
+          const items=(await pool.query("SELECT id,username,display_name,status,created_at FROM agency_players WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[t])).rows;
+          const results=reports?new Map((await playerResults(t)).map(r=>[r.player_id,r])):null;
+          res.json({items:items.map(p=>({...p,...(reports?{results:results.get(p.id)||emptyPlayerResults()}:{})})),reports});
         }),
       );
       app.get(
@@ -506,9 +515,15 @@ function createAgency({
                 )
               ).rows
             : [];
+          const reports=a.kind==='master'||roles[a.role].includes('reports');
+          const results=reports?(await playerResults(t,p))[0]||emptyPlayerResults():null;
+          const rounds=reports?(await pool.query("SELECT r.round_ref,r.stake::text,r.payout::text,(r.payout-r.stake)::text AS net,r.state,r.created_at,g.name AS game FROM agency_rounds r JOIN gameops_games g ON g.id=r.game_id WHERE r.tenant_id=$1 AND r.player_id=$2 ORDER BY r.created_at DESC LIMIT 100",[t,p])).rows:[];
           res.json({
             item,
             balances,
+            results,
+            rounds,
+            risk_access:risk,
             devices,
             device_notice:
               "Sinyal perangkat dapat berubah dan tidak membuktikan identitas atau fraud.",

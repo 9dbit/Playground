@@ -1408,6 +1408,18 @@ async function main() {
       assert.equal(mismatch.length, 0);
     },
   );
+  await check("PLAYER_RESULTS", "Agent owner sees player results and device details with scoped permissions", async () => {
+    const detail=await ok('/api/agency/players/'+PA.id,'GET',undefined,'ownerA');
+    assert.equal(detail.results.stake,'1000');assert.equal(detail.results.payout,'1500');assert.equal(detail.results.net,'500');
+    assert.equal(detail.results.wins,1);assert.equal(detail.results.losses,0);assert.equal(detail.results.settled_rounds,1);
+    assert.ok(detail.devices.length>0);assert.ok(detail.risk_access);
+    const list=await ok('/api/agency/players','GET',undefined,'ownerA');assert.equal(list.items.find(x=>x.id===PA.id).results.net,'500');
+    const finance=await ok('/api/agency/players/'+PA.id,'GET',undefined,'financeA');assert.equal(finance.results.net,'500');assert.equal(finance.risk_access,false);assert.deepEqual(finance.devices,[]);
+    await staff(A.id,'support','supportResults');
+    const support=await ok('/api/agency/players/'+PA.id,'GET',undefined,'supportResults');assert.equal(support.results,null);assert.deepEqual(support.rounds,[]);assert.deepEqual(support.devices,[]);
+    assert.equal((await req('/api/agency/players/'+PA.id,'GET',undefined,'ownerB')).status,404);
+    return {stake:'1000',payout:'1500',playerNet:'500',scoped:true};
+  });
   await check("STOREFRONT", "64COR bootstrap, published manifest and player tenant binding", async () => {
     const {ensure64cor}=require('../engine/agency/storefront');
     const t=await ensure64cor(pool);assert.equal((await ensure64cor(pool)).id,t.id);
@@ -1542,6 +1554,20 @@ async function main() {
           await page
             .getByRole("heading", { name: "Masuk akun", exact: true })
             .waitFor();
+          const ownerContext=await browser.newContext();
+          const [ownerCookie,ownerValue]=creds.get('ownerA').cookie.split('=');
+          await ownerContext.addCookies([{name:ownerCookie,value:ownerValue,url:base,httpOnly:true,sameSite:'Strict'}]);
+          const ownerPage=await ownerContext.newPage();
+          ownerPage.on('pageerror',e=>errors.push(e.message));
+          await ownerPage.goto(base+'/agency#players');
+          await ownerPage.locator('tbody tr').filter({hasText:'player_playera'}).getByRole('button',{name:'Detail',exact:true}).click();
+          await ownerPage.getByRole('heading',{name:'Win / Lose pemain',exact:true}).waitFor();
+          await ownerPage.getByRole('heading',{name:'IP & fingerprint perangkat',exact:true}).waitFor();
+          assert.ok((await ownerPage.locator('#modal').innerText()).includes('500'));
+          await ownerPage.setViewportSize({width:390,height:844});
+          assert.ok(await ownerPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+          await ownerPage.screenshot({path:path.join(__dirname,'../test-results/agent-player-detail.png'),fullPage:true});
+          await ownerContext.close();
           if(process.env.STOREFRONT_PATH){
             process.env.PLAYGROUND_API_ORIGIN=base;
             const {server: storefront}=await import(require('node:url').pathToFileURL(path.join(process.env.STOREFRONT_PATH,'server.mjs')).href);

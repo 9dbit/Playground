@@ -143,6 +143,17 @@
       return url.value.trim();
     };
   }
+  function playerDetail(r) {
+    const d=$("#modal"), stats=r.results;
+    d.innerHTML=`<header><h2>Detail player · ${E(r.item.display_name)}</h2><button class="quiet" id="close-dialog">Tutup</button></header>
+      <p>${E(r.item.username)} · ${E(r.item.status)} · Terdaftar ${date(r.item.created_at)}</p>
+      <h3>Wallet</h3>${table(['Saldo','Koin'],r.balances.map(x=>[x.code.endsWith(':available')?'Tersedia':'Direservasi',num(x.amount)]))}
+      ${stats?`<h3>Win / Lose pemain</h3><p>Semua waktu · hanya ronde settled · Net pemain = payout − bet. Positif berarti pemain untung.</p>
+      <div class="cards">${[['Total bet',num(stats.stake)],['Total payout',num(stats.payout)],['Net pemain',num(stats.net)],['Menang / Kalah / Seri',stats.wins+' / '+stats.losses+' / '+stats.draws]].map(([label,value])=>`<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>
+      <h3>100 ronde terbaru</h3>${table(['Waktu','Game','Ronde','Bet','Payout','Net pemain','Status'],r.rounds.map(x=>[date(x.created_at),E(x.game),E(x.round_ref),num(x.stake),x.state==='settled'?num(x.payout):'—',x.state==='settled'?num(x.net):'—',E(x.state)]))}`:''}
+      ${r.risk_access?`<h3>IP & fingerprint perangkat</h3><p class="muted">${E(r.device_notice)} Fingerprint ini berasal dari sinyal sesi perangkat, bukan identitas hardware.</p>${table(['Waktu','IP','Fingerprint','Browser / perangkat'],r.devices.map(x=>[date(x.created_at),E(x.ip),'<code>'+E(x.fingerprint)+'</code>',E(x.user_agent)]))}`:''}`;
+    $('#close-dialog').onclick=()=>d.close();if(!d.open)d.showModal();
+  }
   function inspect(title, data) {
     const d = $("#modal");
     d.innerHTML = `<header><h2>${E(title)}</h2><button class="quiet" id="close-dialog">Tutup</button></header><pre class="json">${E(JSON.stringify(data, null, 2))}</pre>`;
@@ -411,10 +422,11 @@
         b.innerHTML =
           '<div class="card">' +
           table(
-            ["Player", "Status", "Terdaftar", ""],
+            ["Player", "Status", ...(r.reports?["Total bet","Total payout","Net pemain"]:[]), "Terdaftar", ""],
             r.items.map((x) => [
               E(x.display_name) + "<br><small>" + E(x.username) + "</small>",
               pill(x.status),
+              ...(r.reports?[num(x.results.stake),num(x.results.payout),num(x.results.net)]:[]),
               date(x.created_at),
               button("player", x.id, "Detail"),
             ]),
@@ -423,7 +435,7 @@
         b.querySelectorAll('[data-action="player"]').forEach(
           (el) =>
             (el.onclick = async () =>
-              inspect("Detail player", await api("/players/" + el.dataset.id))),
+              playerDetail(await api("/players/" + el.dataset.id))),
         );
       } else if (view === "transactions") {
         const r = await api("/transactions");
