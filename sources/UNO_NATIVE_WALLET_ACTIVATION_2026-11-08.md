@@ -34,7 +34,7 @@ Deployment UNO `e8f12939-d983-4472-9fe1-f039f1f81da7` sudah SUCCESS. Health publ
 
 UAT deployed melalui API storefront menggunakan satu akun sintetis sandbox (identitas akun tidak dimuat dalam dokumen publik): registrasi → launch → native redeem → state wallet berhasil, saldo/reserved nol, daily/refill nonaktif. Tidak ada deposit, withdraw atau paid round pada akun deployed tersebut. Bukti: `sources/evidence/uno-native-deployed-2026-11-08.json`. Browser berbayar simulasi dijalankan pada DB terisolasi; storefront 64COR asli → tombol Play → native tiga kartu → kembali ke website dengan saldo pusat yang sama. Bridge hostname HTTPS pada harness meneruskan seluruh request ke FastAPI lokal, tanpa mengganti respons game atau wallet.
 
-Mahjong/Skygate dan provider pembayaran, email delivery, SMS/KYC/OAuth tetap pekerjaan tersisa seperti dokumen handoff; tidak diklaim aktif oleh perubahan UNO ini.
+Mahjong/Skygate diselesaikan pada rilis lanjutan di `MAHJONG_SKYGATE_NATIVE_ACTIVATION_2026-11-08.md`. Provider pembayaran, email delivery, SMS/KYC/OAuth tetap mengikuti dokumen handoff.
 
 ## Temuan sebelum integrasi Mahjong/Skygate
 

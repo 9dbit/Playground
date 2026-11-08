@@ -38,4 +38,19 @@ Dua service baru mempunyai volume terpisah. Playground sandbox memakai manifest 
 
 Mode live ditolak oleh runtime. Publikasi Studio lintas-service, migrasi wallet guest lama, sertifikasi RTP/ekonomi live dan pengujian beban native PostgreSQL bukan hasil yang diklaim dalam perubahan ini. Provider pembayaran/email/SMS/KYC/OAuth tetap mengikuti handoff tersendiri.
 
-Status deployment akhir dan smoke test server publik dicatat setelah verifikasi pada bagian berikut.
+## Deployment terverifikasi
+
+Ketiga deployment berikut telah diamati terminal **SUCCESS**:
+
+| Service | Deployment | Source |
+|---|---|---|
+| mahjong-agency-sandbox | `63f6fa25-051d-4cab-82fd-294a875203f7` | `a19db2018013ba54fa4425b19bc9dcf0f7f2cdc3` |
+| skygate-agency-sandbox | `799bbf1e-1412-4ced-a5a0-ebb275454495` | `1af2c6de0ff6384602e14cfb45b41c3d6446104d` |
+| playground-agent-sandbox | `aa5374de-82f6-4c66-9609-25b77b5335ea` | `54a9174c0b7a4ad45838450a5e3c5a1017190359` |
+
+Health publik kedua native runtime: HTTP 200, mode sandbox, wallet Playground, database connected dan exact source commit cocok. Manifest 64COR deployed menampilkan Mahjong, Skygate dan UNO **Active/publishable**.
+
+Smoke test deployed memakai satu akun sintetis zero-coin yang identitasnya tidak dipublikasikan: registrasi melalui storefront → token launch 64COR → redeem native → state wallet pusat berhasil untuk Mahjong dan Skygate. Saldo/reserved 0, presisi agen tetap 0, cookie Secure/HttpOnly/SameSite Strict. State tanpa sesi menolak 401; reset lokal Mahjong menolak 403 dan Skygate tidak menyediakan endpoint reset (404). Launch/redeem/status UNO juga diuji kembali untuk membuktikan kunci lama tetap berfungsi.
+
+Tidak ada deposit, withdraw atau paid round dalam smoke test deployed; paid-round browser UAT dijalankan pada database terisolasi. Bukti deidentified: `sources/evidence/mahjong-skygate-deployed-2026-11-08.json`. Service Playground master produksi semula, main branches dan saldo existing tidak diubah. Commit dokumentasi sesudahnya tidak memerlukan deployment ulang kode.
+
