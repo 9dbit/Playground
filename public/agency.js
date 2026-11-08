@@ -182,7 +182,7 @@
   async function login() {
     const q = new URLSearchParams(location.search);
     $("#app").innerHTML =
-      `<div class="login-card"><a class="brand" href="/agency">PLAYGROUND / AGEN</a><h1>Masuk workspace</h1><p class="muted">Akses operasional khusus agen Anda.</p><form id="login-form">${field("tenant", "Kode agen", q.get("tenant") || "")}${field("username", "Username")}${field("password", "Password", "", "password")}${field("code", "Kode authenticator (jika aktif)")}<p class="error"></p><button type="submit">Masuk</button></form><p class="muted" style="margin-top:20px">Admin Playground: <a href="/agents">buka panel induk</a></p></div>`;
+      `<div class="login-card"><a class="brand" href="/agency">PLAYGROUND / AGEN</a><h1>Masuk workspace</h1><p class="muted">Akses operasional khusus agen Anda.</p><form id="login-form">${field("tenant", "Kode agen", q.get("tenant") || "")}${field("username", "Email / username lama")}${field("password", "Password", "", "password")}${field("code", "Kode authenticator (jika aktif)")}<p class="error"></p><button type="submit">Masuk</button></form><p class="muted" style="margin-top:20px">Admin Playground: <a href="/agents">buka panel induk</a></p></div>`;
     $("#login-form").onsubmit = async (e) => {
       e.preventDefault();
       const b = e.currentTarget.querySelector("button");
@@ -306,10 +306,10 @@
       "Buat agen sandbox",
       field("name", "Nama brand") +
         field("slug", "Kode agen") +
-        field("owner_username", "Username owner") +
+        field("owner_email", "Email agen (username login)", "", "email") +
         field(
           "owner_password",
-          "Password owner (min. 15 karakter)",
+          "Password pilihan agen (min. 15 karakter)",
           "",
           "password",
         ) +
@@ -697,7 +697,7 @@
         b.querySelector('[data-action="new-staff"]').onclick = () =>
           form(
             "Tambah staff",
-            field("username", "Username") +
+            field("username", "Email staff (username login)", "", "email") +
               field("display_name", "Nama") +
               field("role", "Role", "support", "select", opts) +
               field(

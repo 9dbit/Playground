@@ -9,6 +9,7 @@ const {
   slug,
   text,
   username,
+  agentEmail,
   amount,
   key,
   digest,
@@ -113,7 +114,7 @@ function createAgency({
       fail(400, "Pilih basis invoice gross atau net");
     const tenantSlug = slug(p.slug),
       name = text(p.name, 100),
-      user = username(p.owner_username);
+      user = agentEmail(p.owner_email ?? p.owner_username);
     if (!C.passwordValid(p.owner_password))
       fail(400, "Password owner harus 15–128 karakter");
     const hash = await C.passwordHash(p.owner_password);
@@ -139,7 +140,7 @@ function createAgency({
       const s = (
         await db.query(
           "INSERT INTO agency_staff(tenant_id,username,display_name,password_hash,role) VALUES($1,$2,$3,$4,'owner') RETURNING id,username,role",
-          [t.id, user, text(p.owner_name || user, 100), hash],
+          [t.id, user, text(p.owner_name || user.slice(0,100), 100), hash],
         )
       ).rows[0];
       const mode = p.account_mode === "SPLIT" ? "SPLIT" : "SHARED";
@@ -695,8 +696,8 @@ function createAgency({
                 "INSERT INTO agency_staff(tenant_id,username,display_name,role,password_hash,ip_allowlist) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,username,display_name,role,status",
                 [
                   t,
-                  username(p.username),
-                  text(p.display_name || p.username, 100),
+                  agentEmail(p.email ?? p.username),
+                  text(p.display_name || String(p.email ?? p.username).slice(0,100), 100),
                   p.role,
                   hash,
                   asJson(p.ip_allowlist || []),

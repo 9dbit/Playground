@@ -231,7 +231,7 @@ function createAuth({ pool, master, production = false }) {
           if (req.agencySite && req.agencySite.slug !== req.body?.tenant)
             fail(403, "Website agen berbeda");
           const p = req.body || {},
-            u = String(p.username || "").toLowerCase();
+            u = String(p.username || "").trim().toLowerCase();
           const tenant = (
             await pool.query("SELECT * FROM agency_tenants WHERE slug=$1", [
               String(p.tenant || ""),

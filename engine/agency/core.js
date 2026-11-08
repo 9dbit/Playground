@@ -73,6 +73,12 @@ function slug(x) {
     fail(400, "Invalid slug");
   return x;
 }
+function agentEmail(value) {
+  const email = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (email.length > 254 || !/^[a-z0-9.!#$%&'*+\/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(email) || email.split('@')[0].startsWith('.') || email.split('@')[0].endsWith('.') || email.includes('..'))
+    fail(400, "Email agen tidak valid");
+  return email;
+}
 function username(x) {
   if (typeof x !== "string" || !/^[a-z0-9][a-z0-9_.-]{2,63}$/.test(x))
     fail(400, "Invalid username");
@@ -283,6 +289,7 @@ module.exports = {
   id,
   slug,
   username,
+  agentEmail,
   amount,
   key,
   digest,

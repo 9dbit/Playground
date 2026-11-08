@@ -270,7 +270,7 @@ async function main() {
     await ok("/api/admin/agency/tenants", "POST", {
       name: "Alpha QA",
       slug: "alpha-qa",
-      owner_username: "alpha_owner",
+      owner_email: " Alpha.Owner@Example.com ",
       owner_password: password,
       fee_basis: "net",
       account_mode: "SHARED",
@@ -280,12 +280,21 @@ async function main() {
     await ok("/api/admin/agency/tenants", "POST", {
       name: "Beta QA",
       slug: "beta-qa",
-      owner_username: "beta_owner",
+      owner_email: "beta.owner@example.com",
       owner_password: password,
       fee_basis: "gross",
       account_mode: "SPLIT",
     })
   ).tenant;
+  await check("AGENT_EMAIL_LOGIN", "New agent owner uses normalized email and the supplied password", async () => {
+    const {agentEmail}=require('../engine/agency/core');
+    assert.throws(()=>agentEmail('not-an-email'));assert.throws(()=>agentEmail('a..b@example.com'));
+    const owner=(await pool.query("SELECT username,password_hash FROM agency_staff WHERE tenant_id=$1 AND role='owner'",[A.id])).rows[0];
+    assert.equal(owner.username,'alpha.owner@example.com');assert.ok(await C.passwordVerify(password,owner.password_hash));assert.notEqual(owner.password_hash,password);
+    assert.equal((await req('/api/agency/auth/login','POST',{tenant:A.slug,username:' ALPHA.OWNER@EXAMPLE.COM ',password},null)).status,200);
+    assert.equal((await req('/api/agency/auth/login','POST',{tenant:A.slug,username:'alpha.owner@example.com',password:'wrong-password'},null)).status,401);
+    assert.equal((await req('/api/agency/auth/login','POST',{tenant:B.slug,username:'alpha.owner@example.com',password},null)).status,401);
+  });
   await staff(A.id, "owner", "ownerA");
   await staff(A.id, "finance", "financeA");
   await staff(A.id, "supervisor", "superA");
