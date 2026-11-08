@@ -146,6 +146,7 @@ async function topup(t, n) {
   const a = await ok(masterPath(t) + "/coins", "POST", {
     amount: String(n),
     reason: "Synthetic test allocation",
+    idempotency_key: crypto.randomUUID(),
   });
   await ok(masterPath(t) + "/coins/" + a.id + "/review", "POST", {
     decision: "approve",
@@ -314,6 +315,28 @@ async function main() {
   await fund(B.id, 100000, "deposit");
   await fund(A.id, 100000, "risk");
   let dep, manual, wd, late;
+  await check('OX_OPERATIONS','Coin configuration, exports and worklist enforce tenant roles through HTTP',async()=>{
+    const payload={amount:'25',reason:'Oxplay benchmark QA',idempotency_key:crypto.randomUUID()};
+    const first=await ok('/api/agency/coins','POST',payload,'financeA');
+    assert.equal((await ok('/api/agency/coins','POST',payload,'financeA')).id,first.id);
+    assert.equal((await req('/api/agency/coins','POST',{...payload,amount:'26'},'financeA')).status,409);
+    assert.equal((await req(masterPath(A.id)+'/coins/'+first.id+'/review','POST',{decision:'approve'},'ownerA')).status,401);
+    assert.equal((await req(masterPath(B.id)+'/coins/'+first.id+'/review','POST',{decision:'approve'})).status,404);
+    await ok(masterPath(A.id)+'/coins/'+first.id+'/review','POST',{decision:'reject',reason:'QA completed'});
+    const config={mode:'auto',threshold:'0',daily_limit:'100000000',monthly_limit:'300000000',version:0};
+    assert.equal((await req('/api/agency/coins/refill','PUT',config,'financeA')).status,403);
+    assert.equal((await req(masterPath(A.id)+'/coins/refill','PUT',config)).status,401);
+    const saved=await ok(masterPath(A.id)+'/coins/refill','PUT',{...config,current_password:password,code:C.totp(creds.get('master').mfa,Math.floor(Date.now()/30000))});
+    assert.equal(saved.settings.approved_by,creds.get('master').id);
+    await ok('/api/agency/coins/refill','PUT',{...config,mode:'off',version:1},'ownerA');
+    await pool.query('UPDATE gameops_admin_accounts SET mfa_last_step=-1 WHERE id=$1',[creds.get('master').id]);
+    assert.equal((await req('/api/agency/coins/export','GET',undefined,'marketingA')).status,403);
+    assert.equal((await req('/api/agency/reports/transactions','GET',undefined,'marketingA')).status,403);
+    const history=await ok('/api/agency/coins','GET',undefined,'financeA');assert.ok(history.items.every(x=>x.tenant_id===A.id));
+    const csv=await req('/api/agency/coins/export','GET',undefined,'financeA');assert.equal(csv.status,200);assert.match(csv.text,/credited_at/);
+    const work=await ok('/api/agency/worklist','GET',undefined,'marketingA');assert.ok(work.items.some(x=>x.view==='website'));assert.ok(!work.items.some(x=>x.view==='coins'||x.view==='transactions'));
+    assert.ok((await ok(masterPath(A.id)+'/worklist')).items.some(x=>x.view==='coins'));
+  });
   await check(
     "T01",
     "Two tenant reads, guessed IDs and global APIs are isolated",
@@ -1566,9 +1589,7 @@ async function main() {
           await page
             .getByRole("heading", { name: "Ringkasan", exact: true })
             .waitFor();
-          await page
-            .getByRole("link", { name: "Deposit & Withdraw", exact: true })
-            .click();
+          await page.goto(base + '/agents?tenant_id=' + A.id + '#transactions');
           await page.waitForFunction(() =>
             document.querySelector("table tbody tr"),
           );
@@ -1578,10 +1599,10 @@ async function main() {
           });
           await page.setViewportSize({ width: 390, height: 844 });
           await page.goto(base + "/agents#coins");
-          await page.getByRole('link', {name:'Kembali ke master Playground', exact:true}).waitFor();
-          assert.ok(await page.getByRole('link', {name:'Kembali ke master Playground', exact:true}).isVisible());
+          await page.locator('[data-pg-back]').waitFor();
+          assert.ok(await page.locator('[data-pg-menu]').isVisible());
           await page
-            .getByRole("heading", { name: "Stok koin", exact: true })
+            .getByRole("heading", { name: "Stok & auto refill", exact: true })
             .waitFor();
           assert.ok(
             await page.evaluate(
@@ -1732,7 +1753,13 @@ async function main() {
                 await cor.reload();await cor.getByRole('button',{name:'Sudah diklaim',exact:true}).waitFor();assert.equal((await pool.query('SELECT count(*)::int AS n FROM agency_reward_claims WHERE tenant_id=$1',[tenant.id])).rows[0].n,1);
                 await ops.goto(base+'/agency#broadcasts');await ops.getByRole('button',{name:'Pengumuman baru',exact:true}).click();await ops.locator('#modal [name=title]').fill('Connected QA announcement');await ops.locator('#modal [name=body]').fill('Hello <script>safe text</script>');await ops.getByRole('button',{name:'Terbitkan ke inbox',exact:true}).click();await ops.locator('#modal').waitFor({state:'hidden'});
                 await cor.goto(corBase+'/user/messages');await cor.getByRole('button').filter({has:cor.getByRole('heading',{name:'Connected QA announcement',exact:true})}).click();await cor.getByRole('dialog',{name:'Connected QA announcement',exact:true}).waitFor();assert.equal(await cor.locator('[role=dialog] script').count(),0);assert.ok((await cor.locator('[role=dialog]').innerText()).includes('Hello <script>safe text</script>'));
-                await cor.goto(corBase+'/user/activity');await cor.getByText('Bonus diklaim',{exact:true}).waitFor();await cor.goto(corBase+'/user/referral/history');await cor.getByRole('textbox',{name:'Tautan referral',exact:true}).waitFor();
+                await cor.goto(corBase+'/user/activity');await cor.getByText('Bonus diklaim',{exact:true}).waitFor();await cor.goto(corBase+'/user/referral/history');
+                if(fs.existsSync(path.join(process.env.STOREFRONT_PATH,'public/client-preview.js'))){
+                  await cor.getByRole('region',{name:'Referral demo',exact:true}).waitFor();
+                  await cor.getByRole('button',{name:'Mingguan',exact:true}).click();
+                  assert.equal(await cor.getByRole('button',{name:'Mingguan',exact:true}).getAttribute('aria-pressed'),'true');
+                  assert.ok((await cor.locator('#main').innerText()).includes('Data contoh'));
+                }else await cor.getByRole('textbox',{name:'Tautan referral',exact:true}).waitFor();
                 await ops.goto(base+'/agency#activation');await ops.locator('[name=maintenance]').selectOption('true');await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();
                 await cor.goto(corBase+'/');await cor.locator('#main [role=status]').filter({hasText:'pemeliharaan'}).waitFor();
                 await ops.locator('[name=maintenance]').selectOption('false');await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();

@@ -589,3 +589,11 @@ dialog footer {
 #playground-chatvice-signup:focus-visible { outline: 3px solid #7950d8; outline-offset: 4px; }
 
 .readiness-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.readiness-item{padding:16px;background:var(--bg,#f7f7fa);border-radius:16px;min-width:0;overflow-wrap:anywhere}.readiness-item h3{margin:0 0 8px}.readiness-item p{font-size:14px;line-height:1.6;margin:10px 0 0}.activation-error{color:#b02b40}
+
+/* Operations filters retain the established solid cards and pill controls. */
+.history-filter .fields {grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));max-width:1100px}
+.history-filter .toolbar {margin-top:16px}
+.history-filter input,.history-filter select {min-width:0;width:100%;box-sizing:border-box}
+.action-metric {text-decoration:none;color:inherit;background:var(--paper);border-radius:18px}
+.action-metric:focus-visible {outline:3px solid #7759ed;outline-offset:3px}
+.action-metric small {margin-top:8px;color:#7759ed}

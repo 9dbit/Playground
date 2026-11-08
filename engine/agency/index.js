@@ -33,6 +33,8 @@ const { createCashier, tx } = require("./cashier");
 const { createBilling } = require("./billing");
 const { createGames } = require("./games");
 const { createStudio } = require("./studio");
+const { createCoinRefill } = require("./coin-refill");
+const { createBusinessReports } = require("./business-reports");
 function createAgency({
   pool,
   security,
@@ -48,6 +50,8 @@ function createAgency({
     billing = createBilling({ pool }),
     games = createGames({ pool, gameKeys, publicOrigin, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
   const studio = createStudio({pool,security,throttle:auth.throttle});
+  const coinRefill = createCoinRefill({pool,security,workerEnabled:simulationWorker});
+  const businessReports = createBusinessReports({pool});
   function payload(p) {
     const { approval_token, password, code, ...rest } = p || {};
     return rest;
@@ -255,6 +259,7 @@ function createAgency({
   }
   async function init() {
     await pool.query(ddl);
+    await coinRefill.init();
     await pool.query(
       "INSERT INTO agency_game_releases(game_id) SELECT id FROM gameops_games ON CONFLICT DO NOTHING",
     );
@@ -573,11 +578,7 @@ function createAgency({
         prefix + "/transactions",
         wrap(async (req, res) => {
           allow(req, "finance.read");
-          const q = await pool.query(
-            "SELECT * FROM agency_transactions WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",
-            [scope(req)],
-          );
-          res.json({ items: q.rows });
+          res.json(await businessReports.transactions(scope(req),req.query));
         }),
       );
       app.get(
@@ -596,45 +597,30 @@ function createAgency({
         prefix + "/coins",
         wrap(async (req, res) => {
           allow(req, "finance.read");
-          res.json({
-            items: (
-              await pool.query(
-                "SELECT * FROM agency_allocations WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",
-                [scope(req)],
-              )
-            ).rows,
-            stock: (
-              await pool.query(
-                "SELECT code,amount::text FROM agency_balances WHERE tenant_id=$1 AND code LIKE 'stock:%'",
-                [scope(req)],
-              )
-            ).rows,
-          });
+          res.json(await coinRefill.read(scope(req),req.query));
         }),
       );
       app.post(
         prefix + "/coins",
         wrap(async (req, res) => {
           allow(req, "coins.request");
-          const t = scope(req),
-            a = actor(req);
-          res.status(201).json(
-            await locked(pool, t, async (db) => {
-              const q = await db.query(
-                "INSERT INTO agency_allocations(tenant_id,amount,reason,requested_by) VALUES($1,$2,$3,$4) RETURNING *",
-                [
-                  t,
-                  String(amount(req.body.amount)),
-                  text(req.body.reason, 500),
-                  a.id,
-                ],
-              );
-              await audit(db, t, a.id, "coins.requested", q.rows[0].id);
-              return q.rows[0];
-            }),
-          );
+          res.status(201).json(await coinRefill.request(scope(req),actor(req),req.body));
         }),
       );
+      app.put(prefix + "/coins/refill", wrap(async(req,res)=>{
+        allow(req,"coins.request"); await auth.throttle("coin-config:"+actor(req).id);
+        res.json(await coinRefill.save(req,scope(req),req.body));
+      }));
+      app.get(prefix + "/coins/export", wrap(async(req,res)=>{
+        allow(req,"finance.read"); const data=await coinRefill.read(scope(req),req.query,true);
+        await audit(pool,scope(req),actor(req).id,"coins.export",scope(req));
+        res.type("text/csv").attachment("coin-history.csv").send(data);
+      }));
+      app.get(prefix + "/reports/transactions", wrap(async(req,res)=>{
+        allow(req,"finance.read"); const data=await businessReports.transactions(scope(req),req.query,true);
+        await audit(pool,scope(req),actor(req).id,"report.export",scope(req),{type:"filtered-transactions"});
+        res.type("text/csv").attachment("transactions.csv").send(data);
+      }));
       app.get(
         prefix + "/policy",
         wrap(async (req, res) => {
@@ -773,21 +759,7 @@ function createAgency({
         prefix + "/reports",
         wrap(async (req, res) => {
           allow(req, "reports");
-          const t = scope(req);
-          const rows = (
-            await pool.query(
-              `SELECT g.name,g.slug,count(*)::int AS rounds,count(*) FILTER(WHERE r.state='settled')::int AS settled,
- COALESCE(sum(r.stake) FILTER(WHERE r.state='settled'),0)::text AS stake,COALESCE(sum(r.payout) FILTER(WHERE r.state='settled'),0)::text AS payout,
- count(*) FILTER(WHERE r.state='settled' AND r.payout>r.stake)::int AS net_wins FROM agency_rounds r JOIN gameops_games g ON g.id=r.game_id WHERE r.tenant_id=$1 GROUP BY g.name,g.slug`,
-              [t],
-            )
-          ).rows;
-          res.json({
-            items: rows,
-            currency: "COIN minor units",
-            notice:
-              "Observed RTP dan sample bukan bukti fraud; arus kas berbeda dari hasil permainan.",
-          });
+          res.json(await businessReports.report(scope(req),req.query));
         }),
       );
       app.get(
@@ -986,52 +958,7 @@ function createAgency({
       "/api/admin/agency/tenants/:tenant/coins/:allocation/review",
       wrap(async (req, res) => {
         allow(req, "coins.request");
-        const t = scope(req),
-          p = req.body,
-          a = actor(req);
-        res.json(
-          await locked(pool, t, async (db, tenant) => {
-            const r = (
-              await db.query(
-                "SELECT * FROM agency_allocations WHERE tenant_id=$1 AND id=$2 FOR UPDATE",
-                [t, id(req.params.allocation)],
-              )
-            ).rows[0];
-            if (!r || r.status !== "requested")
-              fail(409, "Request sudah diproses atau tidak ditemukan");
-            if (!["approve", "reject"].includes(p.decision))
-              fail(400, "Keputusan tidak valid");
-            if (p.decision === "approve") {
-              const stock =
-                (await balance(db, t, "stock:available")) +
-                (await balance(db, t, "stock:reserved"));
-              if (stock + BigInt(r.amount) > BigInt(tenant.policy.coin_limit))
-                fail(409, "Alokasi melebihi limit stok agen");
-              await post(
-                db,
-                t,
-                "allocation:" + r.id,
-                "stock.allocated",
-                a.id,
-                move("external:coin_allocation", "stock:available", r.amount),
-                { allocation_id: r.id },
-              );
-            }
-            await db.query(
-              "UPDATE agency_allocations SET status=$3,reviewed_by=$4 WHERE tenant_id=$1 AND id=$2",
-              [
-                t,
-                r.id,
-                p.decision === "approve" ? "approved" : "rejected",
-                a.id,
-              ],
-            );
-            await audit(db, t, a.id, "allocation.reviewed", r.id, {
-              decision: p.decision,
-            });
-            return { ok: true };
-          }),
-        );
+        res.json(await coinRefill.review(scope(req),req.params.allocation,actor(req),req.body));
       }),
     );
     app.put(
@@ -1274,6 +1201,7 @@ function createAgency({
       );
   }
   async function runSimulationTick() {
+    await coinRefill.tick();
     const expired = (
       await pool.query(
         "SELECT x.tenant_id,x.id FROM agency_transactions x JOIN agency_tenants t ON t.id=x.tenant_id WHERE t.environment='sandbox' AND x.kind='deposit' AND x.state='pending' AND (x.data->>'expires_at')::timestamptz<=now() ORDER BY x.created_at LIMIT 20",
@@ -1342,6 +1270,8 @@ function createAgency({
     mount,
     startWorker,
     runSimulationTick,
+    coinRefill,
+    businessReports,
     auth,
     cashier,
     billing,
