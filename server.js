@@ -140,7 +140,7 @@ app.get('/wallet',security.protectedPage('wallet.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
 for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js','data-ui.js','data-nav.js','wallet-ui.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
-for (const filename of ['control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['platform-navigation.js','platform-navigation.css','control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([

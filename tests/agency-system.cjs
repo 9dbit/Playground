@@ -1498,6 +1498,7 @@ async function main() {
             const response = await page.goto(base + masterPath);
             assert.equal(response.status(), 200);
             await page.locator("#chatvice-widget-frame").waitFor();
+            await page.getByRole("button", {name:"☰ Menu utama",exact:true}).waitFor();
             const policy = response.headers()["content-security-policy"];
             assert.match(policy, /connect-src[^;]*wss:\/\/chatvice\.app/);
             assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline/);
@@ -1506,8 +1507,8 @@ async function main() {
           }
           assert.equal(widgetRequests.length, 6);
           await page.goto(base + '/engine');
-          await page.locator('.sidebar [data-agency-link]').waitFor();
-          assert.equal(await page.locator('.sidebar [data-agency-link]').getAttribute('href'), '/agents');
+          await page.locator('.sidebar [data-go="@agents"]').waitFor();
+          assert.equal(await page.locator('.sidebar [data-go="@agents"]').count(), 1);
 
           for (const url of widgetRequests) assert.equal(url, "https://chatvice.app/api/widget/chatvice.js?merchant=m_36f76fcbe11167ed&v=1793889257");
           for (const privatePath of ["/security", "/agency"]) {
@@ -1515,6 +1516,34 @@ async function main() {
             assert.equal(await page.locator("#playground-chatvice-script").count(), 0);
             if (privatePath !== "/agency") assert.doesNotMatch(response.headers()["content-security-policy"], /script-src[^;]*chatvice\.app/);
           }
+          const menuAudit=[];
+          const menuSource=fs.readFileSync(path.join(__dirname,'../public/platform-navigation.js'),'utf8');
+          const menuGroups=require('node:vm').runInNewContext(menuSource.slice(0,menuSource.indexOf('(() =>'))+';MASTER_MENUS');
+          const masterURLs=[...new Set(menuGroups.flatMap(g=>g[1].map(x=>x[1])))].filter(u=>u.startsWith('/engine#/'));
+          for(const url of masterURLs){
+            await page.goto(base+url);
+            await page.locator('.head h1').waitFor();
+            const title=await page.locator('.head h1').innerText();
+            assert.ok(!['Not found','Load failed'].includes(title),url+': '+title);
+            menuAudit.push({scope:'master',url,title,status:'rendered'});
+          }
+          await page.goto(base+'/agents?tenant_id='+A.id+'#overview');
+          const sections=await page.locator('.sidebar [data-view]').evaluateAll(es=>es.map(e=>e.dataset.view));
+          for(const view of sections){
+            await page.goto(base+'/agents?tenant_id='+A.id+'#'+view);
+            await page.locator('#page-title').waitFor();
+            await page.locator('#body > .loading').waitFor({state:'hidden'});
+            assert.equal(await page.locator('#body .error').count(),0,view);
+            menuAudit.push({scope:'master-agent',url:'#'+view,status:'rendered'});
+          }
+          await page.setViewportSize({width:390,height:844});
+          await page.getByRole('button',{name:'☰ Menu utama',exact:true}).click();
+          await page.locator('#pg-main-menu').waitFor();
+          assert.ok(await page.locator('#pg-main-menu a[href="/wallet"]').isVisible());
+          assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+          await page.screenshot({path:path.join(__dirname,'../test-results/playground-main-menu-mobile.png'),fullPage:false});
+          await page.getByRole('button',{name:'Tutup',exact:true}).click();
+          fs.writeFileSync(path.join(__dirname,'../test-results/menu-route-audit.json'),JSON.stringify(menuAudit,null,2));
           const anonymous = await browser.newPage();
           await anonymous.goto(base + "/engine");
           assert.equal(new URL(anonymous.url()).pathname, "/login");
@@ -1536,8 +1565,8 @@ async function main() {
           });
           await page.setViewportSize({ width: 390, height: 844 });
           await page.goto(base + "/agents#coins");
-          await page.getByRole('link', {name:'← Master Playground', exact:true}).waitFor();
-          assert.ok(await page.getByRole('link', {name:'← Master Playground', exact:true}).isVisible());
+          await page.getByRole('link', {name:'Kembali ke master Playground', exact:true}).waitFor();
+          assert.ok(await page.getByRole('link', {name:'Kembali ke master Playground', exact:true}).isVisible());
           await page
             .getByRole("heading", { name: "Stok koin", exact: true })
             .waitFor();
@@ -1604,6 +1633,21 @@ async function main() {
           await ownerPage.setViewportSize({width:390,height:844});
           assert.ok(await ownerPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
           await ownerPage.screenshot({path:path.join(__dirname,'../test-results/agent-player-detail.png'),fullPage:true});
+          await ownerPage.locator('#close-dialog').click();
+          const ownerViews=await ownerPage.locator('.sidebar [data-view]').evaluateAll(es=>es.map(e=>e.dataset.view));
+          for(const view of ownerViews){
+            await ownerPage.goto(base+'/agency#'+view);
+            await ownerPage.locator('#page-title').waitFor();
+            await ownerPage.locator('#body > .loading').waitFor({state:'hidden'});
+            assert.equal(await ownerPage.locator('#body .error').count(),0,view);
+          }
+          await ownerPage.getByRole('button',{name:'☰ Menu utama',exact:true}).click();
+          assert.equal(await ownerPage.locator('#pg-main-menu a[href^="/engine"],#pg-main-menu a[href="/agents"]').count(),0);
+          assert.equal(await ownerPage.locator('#pg-main-menu .pg-menu-grid a').count(),ownerViews.length);
+          await ownerPage.screenshot({path:path.join(__dirname,'../test-results/agent-main-menu-mobile.png'),fullPage:false});
+          const audited=JSON.parse(fs.readFileSync(path.join(__dirname,'../test-results/menu-route-audit.json')));
+          audited.push(...ownerViews.map(view=>({scope:'agent-owner',url:'#'+view,status:'rendered'})));
+          fs.writeFileSync(path.join(__dirname,'../test-results/menu-route-audit.json'),JSON.stringify(audited,null,2));
           await ownerContext.close();
           if(process.env.STOREFRONT_PATH){
             process.env.PLAYGROUND_API_ORIGIN=base;
@@ -1642,6 +1686,18 @@ async function main() {
               await cor.waitForFunction(()=>{const img=document.querySelector('.hero-slide.active img');return img?.complete&&img.naturalWidth===600;});
               assert.ok(await cor.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
               await cor.screenshot({path:path.join(__dirname,'../test-results/64cor-connected-mobile.png'),fullPage:true});
+              const policy=await ok('/api/admin/agency/tenants/'+tenant.id+'/content/privacy-policy','PUT',{content:{title:'QA Privacy CMS',body:'Published policy test <script>escaped</script>',description:'Policy description'},expected_version:0});
+              await ok('/api/admin/agency/tenants/'+tenant.id+'/content/'+policy.id+'/publish','POST',{expected_version:policy.version});
+              await cor.goto(corBase+'/legal/privacy-policy');
+              await cor.getByRole('heading',{name:'QA Privacy CMS',exact:true}).waitFor();
+              assert.ok((await cor.locator('.info-content').innerText()).includes('<script>escaped</script>'));
+              assert.equal(await cor.locator('.info-content script').count(),0);
+              assert.ok((await cor.locator('link[rel="canonical"]').getAttribute('href')).endsWith('/legal/privacy-policy'));
+              const frontendRoutes=['/search','/slot/category/hot','/promotions/all','/user','/user/history','/user/messages','/user/bonuses','/referral','/leaderboard','/about-us','/legal/terms-and-conditions','/legal/responsible-gaming'];
+              for(const route of frontendRoutes){await cor.goto(corBase+route);await cor.locator('#main').waitFor();assert.ok(!(await cor.locator('#main').innerText()).includes('Halaman tidak ditemukan'),route);}
+              const audit=JSON.parse(fs.readFileSync(path.join(__dirname,'../test-results/menu-route-audit.json')));
+              audit.push(...frontendRoutes.map(url=>({scope:'storefront',url,status:'rendered; capability gates retained'})));
+              fs.writeFileSync(path.join(__dirname,'../test-results/menu-route-audit.json'),JSON.stringify(audit,null,2));
               await cor.goto(corBase+'/contact');await cor.locator('[name="subject"]').fill('Integration QA');await cor.locator('[name="message"]').fill('Test support ticket');
               await cor.locator('form[data-form="support"] button').click();
               await cor.getByRole('dialog',{name:'Tiket terkirim'}).waitFor();

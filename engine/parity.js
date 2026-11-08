@@ -58,7 +58,7 @@ const settings=[
 ['Social Login Setting','social','blocked','OAuth provider integration not active.'],
 ['Language','language','partial','Locale settings stored; translations incomplete.'],
 ['Extensions','extensions','blocked','No extension sandbox or runtime.'],
-['Cron Job Setting','cron','blocked','No configured, monitored job runner.'],
+['Cron Job Setting','cron','partial','Local expired-session cleanup runner and history exist; agent settlement and external business jobs use separate workers.'],
 ['Policy Pages','policies','partial','Published simple text page; rich editor and SEO incomplete.'],
 ['Maintenance Mode','maintenance','partial','Protects published info pages, not external game sites.'],
 ['GDPR Cookie','gdpr','blocked','Consent recording and revocation not connected.'],

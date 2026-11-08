@@ -4,7 +4,7 @@
  let busy=false;
  const add=()=>{
   const sidebar=document.querySelector('.sidebar,.side');
-  if(sidebar&&!sidebar.querySelector('[data-cp15-link]')){const a=document.createElement('a');a.dataset.cp15Link='true';a.className='nav-root';a.href='/data';a.textContent='Game Data / Reconciliation';sidebar.appendChild(a);}
+  if(sidebar&&!sidebar.querySelector('[data-cp15-link], [data-go="@data"]')){const a=document.createElement('a');a.dataset.cp15Link='true';a.className='nav-root';a.href='/data';a.textContent='Game Data / Reconciliation';sidebar.appendChild(a);}
   const main=document.querySelector('.main');
   const onDashboard=/^#\/?dashboard$/.test(location.hash)||!location.hash;
   if(!main||!onDashboard||main.querySelector('[data-cp15-summary]')||busy)return;

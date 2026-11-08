@@ -2,7 +2,7 @@
   const add = () => {
     const nav =
       document.querySelector(".sidebar nav") || document.querySelector(".sidebar") || document.querySelector("nav");
-    if (!nav || nav.querySelector("[data-agency-link]")) return;
+    if (!nav || nav.querySelector("[data-agency-link], [data-go=\"@agents\"]")) return;
     const a = document.createElement("a");
     a.href = "/agents";
     a.dataset.agencyLink = "true";

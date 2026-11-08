@@ -8,7 +8,7 @@ function attachGameBridge() {
       node.textContent='Catalog metrics. Open Game Bridge for live transport status.';
   }
   const footer=document.querySelector('.nav-footer');
-  if(!footer||footer.querySelector('[data-game-bridge]'))return;
+  if(!footer||document.querySelector('[data-go="@integrations"]')||footer.querySelector('[data-game-bridge]'))return;
   const a=document.createElement('a');a.dataset.gameBridge='true';a.href='/integrations';a.textContent='Game Bridge / Connections';
   a.style.display='block';a.style.padding='12px 0';a.style.color='#d6dfff';a.style.fontWeight='700';footer.prepend(a);
 }
