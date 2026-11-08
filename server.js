@@ -42,7 +42,7 @@ const publicOrigin=process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DO
 const chatvice={origin:process.env.AGENCY_CHATVICE_ORIGIN||'',masterMerchant:process.env.AGENCY_CHATVICE_MASTER_MERCHANT||'',tenants:JSON.parse(process.env.AGENCY_CHATVICE_TENANT_MERCHANTS||'{}')};
 if(chatvice.origin){if(new URL(chatvice.origin).origin!=='https://chatvice.app')throw new Error('Only the official Chatvice origin is supported');chatvice.origin=new URL(chatvice.origin).origin;}
 const agency=createAgency({pool,security,master:SESSION_SECRET,publicDir:path.join(__dirname,'public'),production:PRODUCTION,
- gameKeys:JSON.parse(process.env.AGENCY_GAME_KEYS||'[]'),simulationWorker:process.env.AGENCY_SIMULATION_WORKER==='true',chatvice});
+ gameKeys:[...JSON.parse(process.env.AGENCY_GAME_KEYS||'[]'),...JSON.parse(process.env.AGENCY_NATIVE_GAME_KEYS||'[]')],simulationWorker:process.env.AGENCY_SIMULATION_WORKER==='true',chatvice});
 const activation=require('./engine/agency/activation').createActivation({pool,agency,security,publicDir:path.join(__dirname,'public')});
 const agencyEmail=require('./engine/agency/email').createEmail({pool,agency,origin:publicOrigin});agency.email=agencyEmail;
 agency.activation=activation;agency.auth.onRegistered=activation.registered;agency.auth.maintenance=activation.maintenance;
@@ -125,6 +125,7 @@ async function initDB() {
   }
   await bridge.init(); await wallet.init();
   await agency.init(); await activation.init(); await agencyEmail.init();
+  await require('./engine/agency/native-releases').applySandboxReleases({pool,schema:DATABASE_SCHEMA,configured:agency.games.configured,releases:JSON.parse(process.env.AGENCY_SANDBOX_RELEASES||'[]')});
   const conflicts=await publicContent.inspectConflicts(pool);
   console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }

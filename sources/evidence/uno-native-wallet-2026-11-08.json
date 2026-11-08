@@ -1,0 +1,57 @@
+{
+  "mode": "postgresql-wasm",
+  "productionContacted": false,
+  "startedAt": "2026-11-08T06:10:01.079Z",
+  "completedAt": "2026-11-08T06:10:25.868Z",
+  "failures": [],
+  "checks": [
+    {
+      "id": "ACT_ADAPTER",
+      "title": "Node/Python signed wallet clients recover redeem responses and reconcile exact central round state",
+      "status": "PASS",
+      "evidence": {
+        "clients": [
+          "Node",
+          "Python"
+        ],
+        "redeemRetry": "same session",
+        "roundReserveRetry": "one debit",
+        "settleRetry": "one payout",
+        "balanceBefore": "500",
+        "balanceAfter": "550",
+        "nativeGameCertified": false,
+        "ledgerDifferences": 0
+      }
+    },
+    {
+      "id": "NATIVE_RELEASE",
+      "title": "Sandbox deployment is isolated, audited and cannot undo a later operator maintenance decision",
+      "status": "PASS",
+      "evidence": {
+        "sandboxSchemaRequired": true,
+        "liveTenantBlocked": true,
+        "operatorMaintenancePreserved": true,
+        "auditRecords": 1
+      }
+    },
+    {
+      "id": "NATIVE_UNO",
+      "title": "UNO native browser settles exactly once in Playground across a game-server restart",
+      "status": "PASS",
+      "evidence": {
+        "native": "FastAPI + persistent SQLite",
+        "browser": "Chromium 393x852",
+        "processRestart": "after first card",
+        "stake": "25",
+        "payout": "50",
+        "balance": "1025",
+        "centralRound": "85d5f3f5-1ae4-46bf-93d8-317f500002e6",
+        "settlementJournals": 1,
+        "ledgerDifferences": 0,
+        "environment": "isolated sandbox",
+        "productionContacted": false
+      }
+    }
+  ],
+  "suite_passed": 38
+}

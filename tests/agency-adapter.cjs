@@ -10,6 +10,9 @@ module.exports=async({pool,runtime,check,player,A,B,topup,paid,ok,base,gameSecre
   await assert.rejects(()=>client.redeem(launch.token,'different-request'),e=>e.status===409);
   const body={tenant_id:A.id,session_id:session.session_id,round_ref:'adapter:'+crypto.randomUUID(),stake:'100',max_payout:'200'};
   const r=await client.reserve(body);assert.equal((await client.reserve(body)).id,r.id);const status=await client.status({...body});assert.equal(status.balance,'400');assert.equal(status.reserved,'100');assert.equal(status.rounds[0].state,'reserved');
+  await pool.query("UPDATE agency_launches SET expires_at=now()-interval '1 second' WHERE id=$1",[session.session_id]);
+  assert.equal((await client.reserve(body)).id,r.id);
+  await assert.rejects(()=>client.reserve({...body,round_ref:'new-after-expiry'}),e=>e.status===401);
   const closed={tenant_id:A.id,round_id:r.id,payout:'150',evidence:'Server outcome fixture, not native game UAT'};await client.settle(closed);await client.settle(closed);assert.equal((await client.status(body)).balance,'550');
   await assert.rejects(()=>client.status({...body,tenant_id:B.id}),e=>e.status===403);
   const {spawn}=require('node:child_process');

@@ -31,13 +31,13 @@ Referensi adapter: [Resend Send Email](https://resend.com/docs/api-reference/ema
 - Simpan request ID dan outcome di DB native sebelum request jaringan. Jika timeout: status tidak pasti; jangan mengganti round reference, menambahkan saldo lokal, atau menghitung ulang outcome.
 - Secret hanya pada server native. Frontend menerima token launch sekali pakai lewat fragment, lalu menukarkannya ke server native. Jangan memanggil HMAC endpoint dari browser.
 
-**Transport bukan integrasi native lengkap.** Kode transport sudah diuji terhadap backend aktual dengan Node dan Python, tetapi belum dipasang pada jalur wallet masing-masing repository game. Native game tetap Maintenance di sandbox deployed.
+**Status lanjutan 8 November:** UNO Orbit sudah menggunakan transport ini pada jalur gameplay native, dengan outcome/phase durable, retry dan abandonment settlement. Lihat `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate belum terpasang dan tetap Maintenance; adapter transport saja tidak cukup untuk mengaktifkannya.
 
 ## Temuan source native dan keputusan yang masih diperlukan
 
 | Game / source | Temuan yang dibaca | Pekerjaan sebelum publishable |
 |---|---|---|
-| UNO LUCK `9dbit/uno-luck`, `app/orbit.py`, `app/spin.py` | FastAPI + SQLite; tiga kartu dipilih server-side; debit/payout memakai `accounts.balance` dan ledger lokal; bonus/refill lokal. `WIN_PERCENT=80`, payout tier bersifat koin virtual. | Ganti sumber saldo untuk sesi agency, simpan intent/outcome native sebelum reserve/settle, recovery crash antar fase, nonaktifkan bonus/refill lokal untuk sesi agency. Pastikan kebijakan abandonment dan ekonomi payout disetujui. |
+| UNO LUCK `9dbit/uno-luck`, `app/orbit.py`, `app/spin.py` | FastAPI + SQLite; tiga kartu dipilih server-side; debit/payout memakai `accounts.balance` dan ledger lokal; bonus/refill lokal. `WIN_PERCENT=80`, payout tier bersifat koin virtual. | Implementasi sandbox selesai: wallet pusat, SQLite durable, retry lintas restart/sesi, hadiah/refill lokal ditolak, abandonment 15 menit. coin_scale harus 0. Ekonomi payout belum layak live; math tidak diubah. |
 | Mahjong `9dbit/Mahjong-legend`, `game_studio/game.py` | Django, `PlayerSession`, ticket/idempotency/ledger lokal, Decimal hingga 12 digit. | Mapping precision ke `coin_scale`, durable reservation/outcome, cutover identitas player, crash/retry/bonus-round tests. |
 | Skygate `9dbit/Skygate`, `play/game.js`, `studio/math/engine.js` | Frontend permainan dan engine deterministik berbasis seed; server saat ini melayani aset/studio, bukan otoritas wallet ronde. | Runtime outcome server-side dengan RNG yang sesuai, persistence ronde, integrasi reserve/settle dan validasi bahwa client tidak dapat mengirim payout yang dipercaya. |
 

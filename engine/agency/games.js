@@ -139,7 +139,7 @@ function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
   }
   async function reserve(p, scope) {
     return locked(pool, id(p.tenant_id), async (db, t) => {
-      const l = await session(db, t, p.session_id, scope),
+      const l = await session(db, t, p.session_id, scope, false),
         stake = amount(p.stake),
         max = amount(p.max_payout, true),
         ref = text(p.round_ref, 120);
@@ -158,6 +158,7 @@ function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
           fail(409, "Round id reused with different request");
         return old;
       }
+      if (new Date(l.expires_at) <= new Date()) fail(401, "Session kedaluwarsa");
       const game = await entitled(db, t, l.game_id);
       const pl = (
         await db.query(
