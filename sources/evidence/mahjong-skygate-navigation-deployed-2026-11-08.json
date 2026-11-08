@@ -1,0 +1,72 @@
+{
+  "checkedAt": "2026-11-08T07:32:46.844796+00:00",
+  "environment": "sandbox",
+  "moneyTransferred": false,
+  "paidRounds": 0,
+  "accountPurpose": "Synthetic zero-coin UAT; identity omitted",
+  "games": [
+    {
+      "game": "mahjong-wild",
+      "source_commit": "49e085bde098b6d7fb86910443c8f823e0f894f1",
+      "health": "database connected",
+      "catalog": "Active/publishable",
+      "launch": "64COR launch \u2192 native redeem \u2192 central state",
+      "balance": 0,
+      "reserved": 0,
+      "coin_scale": 0,
+      "guestReset": "unavailable",
+      "anonymousWalletStatus": 401,
+      "anonymousContextStatus": 401,
+      "navigation": {
+        "home_url": "https://playground-agent-frontend-production.up.railway.app",
+        "label": "64COR",
+        "expiryFuture": true,
+        "redeemContextAndStateAgree": true
+      }
+    },
+    {
+      "game": "skygate-5000",
+      "source_commit": "808ad63292e5681b7eb08b579661c495d061fa29",
+      "health": "database connected",
+      "catalog": "Active/publishable",
+      "launch": "64COR launch \u2192 native redeem \u2192 central state",
+      "balance": 0,
+      "reserved": 0,
+      "coin_scale": 0,
+      "guestReset": "unavailable",
+      "anonymousWalletStatus": 401,
+      "anonymousContextStatus": 401,
+      "navigation": {
+        "home_url": "https://playground-agent-frontend-production.up.railway.app",
+        "label": "64COR",
+        "expiryFuture": true,
+        "redeemContextAndStateAgree": true
+      }
+    }
+  ],
+  "nativeCookies": "Secure / HttpOnly / SameSite Strict",
+  "unoRegression": "existing key, native launch and zero-coin central wallet pass",
+  "deployment": {
+    "backend": {
+      "id": "7bab9526-effc-41e0-b202-11677261230a",
+      "source_commit": "4e21ae71bffbc7f863cab8fa0c3fefa86b5ae87a",
+      "status": "SUCCESS"
+    },
+    "mahjong": {
+      "id": "9f78867b-9f9a-48ad-856e-7c5a02776b21",
+      "status": "SUCCESS"
+    },
+    "skygate": {
+      "id": "804bb13b-ff7b-47c8-9c12-588c828545f0",
+      "status": "SUCCESS"
+    }
+  },
+  "navigationAssetsMatchTestedSource": true,
+  "mahjongCIRepair": {
+    "commit": "20845caa6fba100ab53122319d5d692c2be5e758",
+    "change": "Install application requirements and pytest; run both unittest and native pytest cases using pytest",
+    "localFullBuildTests": 115,
+    "localFullBuildSubtests": 71,
+    "failures": 0
+  }
+}

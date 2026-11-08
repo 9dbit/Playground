@@ -6,8 +6,8 @@ Mahjong Wild dan Skygate 5000 sekarang mempunyai runtime server native yang melu
 
 | Game | Implementasi | Source | Draft PR | Sandbox |
 |---|---|---|---|---|
-| Mahjong Wild | FastAPI, engine Python asli, konfigurasi baseline + engine hash per tiket | `a19db2018013ba54fa4425b19bc9dcf0f7f2cdc3` | https://github.com/9dbit/Mahjong-legend/pull/16 | https://mahjong-agency-sandbox-production.up.railway.app |
-| Skygate 5000 | Node 24, engine asli server-side, crypto RNG dan config hash per ronde | `1af2c6de0ff6384602e14cfb45b41c3d6446104d` | https://github.com/9dbit/Skygate/pull/25 | https://skygate-agency-sandbox-production.up.railway.app/play/ |
+| Mahjong Wild | FastAPI, engine Python asli, konfigurasi baseline + engine hash per tiket | `49e085bde098b6d7fb86910443c8f823e0f894f1` | https://github.com/9dbit/Mahjong-legend/pull/16 | https://mahjong-agency-sandbox-production.up.railway.app |
+| Skygate 5000 | Node 24, engine asli server-side, crypto RNG dan config hash per ronde | `808ad63292e5681b7eb08b579661c495d061fa29` | https://github.com/9dbit/Skygate/pull/25 | https://skygate-agency-sandbox-production.up.railway.app/play/ |
 
 Buka game melalui tombol Play website 64COR agar token player/agen diterbitkan. Link game langsung tanpa sesi menolak akses saldo. Key HMAC terpisah per game/environment dan tidak diberikan ke browser. Kunci native UNO dipertahankan.
 
@@ -38,7 +38,7 @@ Dua service baru mempunyai volume terpisah. Playground sandbox memakai manifest 
 
 Mode live ditolak oleh runtime. Publikasi Studio lintas-service, migrasi wallet guest lama, sertifikasi RTP/ekonomi live dan pengujian beban native PostgreSQL bukan hasil yang diklaim dalam perubahan ini. Provider pembayaran/email/SMS/KYC/OAuth tetap mengikuti handoff tersendiri.
 
-## Deployment terverifikasi
+## Deployment awal native terverifikasi
 
 Ketiga deployment berikut telah diamati terminal **SUCCESS**:
 
@@ -64,3 +64,18 @@ Redeem dan signed status pusat mengirim navigation dan expiry dua jam yang seben
 UAT mobile memakai tombol kembali asli sambil menahan respons spin yang sudah diproses server. Setelah kembali ke akun 64COR, saldo cocok, semua ronde settled, masing-masing satu settlement journal. Mahjong: dua ronde; Skygate: empat ronde termasuk Buy Spin dan Bonus Booster. UAT juga memaksa expiry pada database terisolasi dan memeriksa pesan serta tujuan kembali. Seluruh 40 skenario integrasi lulus; unit backend 62 lulus/5 skip, Mahjong 34 lulus, Skygate 118 lulus. Tidak ada transaksi bank atau paid spin pada layanan deployed.
 
 Bukti: `sources/evidence/mahjong-skygate-native-2026-11-08.json`. Ini melengkapi integrasi sandbox; tidak mengaktifkan ekonomi live atau publikasi Studio lintas-service.
+
+## Deployment pembaruan navigasi
+
+Pembaruan navigasi sudah terpasang pada service native sandbox dan teramati SUCCESS:
+
+| Service | Deployment | Source |
+|---|---|---|
+| mahjong-agency-sandbox | `9f78867b-9f9a-48ad-856e-7c5a02776b21` | `49e085bde098b6d7fb86910443c8f823e0f894f1` |
+| skygate-agency-sandbox | `804bb13b-ff7b-47c8-9c12-588c828545f0` | `808ad63292e5681b7eb08b579661c495d061fa29` |
+
+Backend metadata navigasi memakai commit `4e21ae71bffbc7f863cab8fa0c3fefa86b5ae87a`, deployment final `7bab9526-effc-41e0-b202-11677261230a` berstatus SUCCESS. Manifest sandbox diperbarui ke kedua source commit native tersebut, dengan entri UNO tetap sama. Dokumen/evidence final dipublikasikan sesudah deployment, sehingga HEAD dokumentasi dapat lebih baru dari source yang berjalan.
+
+Smoke test deployed lulus: launch 64COR, redeem, context, status pusat, tujuan kembali canonical dan expiry masa depan konsisten pada kedua game. Context tanpa cookie menolak 401. Aset navigasi dari kedua domain deployed cocok byte-for-byte dengan source yang diuji. Regresi launch UNO tetap lulus. Bukti tanpa identitas akun: `sources/evidence/mahjong-skygate-navigation-deployed-2026-11-08.json`.
+
+CI Mahjong sebelumnya gagal mengimpor native tests karena job lama hanya memasang Pillow/Playwright dan menjalankan unittest. Commit CI `20845caa6fba100ab53122319d5d692c2be5e758` memasang requirements aplikasi plus pytest serta menjalankan seluruh tests melalui pytest. Validasi lokal setelah build lengkap sesuai pipeline: **115 tests dan 71 subtests lulus**, termasuk dua native tests. Perubahan ini hanya workflow; source runtime deployed tetap `49e085bde098b6d7fb86910443c8f823e0f894f1`.
