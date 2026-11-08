@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS agency_players (
  limits jsonb NOT NULL DEFAULT '{}', auth_version integer NOT NULL DEFAULT 1,
  created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(tenant_id,username), UNIQUE(tenant_id,id)
 );
+ALTER TABLE agency_players ADD COLUMN IF NOT EXISTS profile jsonb NOT NULL DEFAULT '{}';
 CREATE TABLE IF NOT EXISTS agency_sessions (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL REFERENCES agency_tenants(id),
  staff_id uuid, player_id uuid, token_hash text UNIQUE NOT NULL, auth_version integer NOT NULL,

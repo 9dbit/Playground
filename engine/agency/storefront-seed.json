@@ -1,0 +1,328 @@
+{
+  "banners": [
+    {
+      "image": "/assets/soft-tech/soft-tech-originals-hero-v1.webp",
+      "title": "Soft Tech · Original Games",
+      "path": "/search?q=Soft%20Tech",
+      "id": "soft-tech-brand"
+    },
+    {
+      "image": "/assets/soft-tech/uno-luck-hero-v1.webp",
+      "title": "Uno Luck · Soft Tech Original",
+      "path": "/play/originals/soft-tech-uno-luck",
+      "id": "soft-tech-uno-luck"
+    },
+    {
+      "image": "/assets/soft-tech/mahjong-wild-hero-v1.webp",
+      "title": "Mahjong Wild · Soft Tech Original",
+      "path": "/play/originals/soft-tech-mahjong-wild",
+      "id": "soft-tech-mahjong-wild"
+    },
+    {
+      "image": "/assets/soft-tech/skygate-hero-v1.webp",
+      "title": "Skygate 5000 · Soft Tech Original",
+      "path": "/play/originals/soft-tech-skygate",
+      "id": "soft-tech-skygate"
+    },
+    {
+      "image": "/assets/18144c5f9d3bb644.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g721",
+      "id": "721"
+    },
+    {
+      "image": "/assets/4e7959246c246e40.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all",
+      "id": null
+    },
+    {
+      "image": "/assets/ca590c01e6b2571c.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all",
+      "id": null
+    },
+    {
+      "image": "/assets/0dac26a70c0083e5.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all",
+      "id": null
+    },
+    {
+      "image": "/assets/18b1bf5b42e9509f.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all",
+      "id": null
+    },
+    {
+      "image": "/assets/3c51548c6ac9750a.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all",
+      "id": null
+    },
+    {
+      "image": "/assets/f36b84da2a2f0a11.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g757",
+      "id": "757"
+    },
+    {
+      "image": "/assets/3f67a77038e3e294.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g744",
+      "id": "744"
+    },
+    {
+      "image": "/assets/32d09a41a9553f6c.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g574",
+      "id": "574"
+    },
+    {
+      "image": "/assets/7b229a4ba1a41fb9.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g575",
+      "id": "575"
+    },
+    {
+      "image": "/assets/d78b7532e0f400d9.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g737",
+      "id": "737"
+    },
+    {
+      "image": "/assets/f441792fdd03854b.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g589",
+      "id": "589"
+    },
+    {
+      "image": "/assets/54bb3c2e4da95a21.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g754",
+      "id": "754"
+    },
+    {
+      "image": "/assets/d97d04929e2bd54d.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g756",
+      "id": "756"
+    },
+    {
+      "image": "/assets/165b3cd07ae16145.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g698",
+      "id": "698"
+    },
+    {
+      "image": "/assets/88f625eae7712a0d.webp",
+      "title": "Promosi GOBI88",
+      "path": "/promotions/all/g566",
+      "id": "566"
+    }
+  ],
+  "promotions": [
+    {
+      "id": "g757",
+      "title": "Crazy Slot Mania Oktober",
+      "image": "/assets/110d237351bfd84a.webp",
+      "coverImage": "/assets/110d237351bfd84a.webp",
+      "banner": "/assets/f36b84da2a2f0a11.webp",
+      "category": "slots",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g748",
+      "title": "STREAM N’ SPIN CASHDROP",
+      "image": "/assets/7f8df9981ac00b3b.webp",
+      "coverImage": "/assets/7f8df9981ac00b3b.webp",
+      "banner": null,
+      "category": "slots",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g744",
+      "title": "Clash Of Colosseum Horse Racing Bonus Harian",
+      "image": "/assets/0c621ba5c96a0489.webp",
+      "coverImage": "/assets/0c621ba5c96a0489.webp",
+      "banner": "/assets/3f67a77038e3e294.webp",
+      "category": "slots",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g698",
+      "title": "Golden Crown Showdown",
+      "image": "/assets/a92d5496a25d963d.webp",
+      "coverImage": "/assets/a92d5496a25d963d.webp",
+      "banner": "/assets/165b3cd07ae16145.webp",
+      "category": "slots",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g567",
+      "title": "Level Up Game Rewards",
+      "image": "/assets/e851c5a94358e3c9.webp",
+      "coverImage": "/assets/e851c5a94358e3c9.webp",
+      "banner": null,
+      "category": "slots",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g652",
+      "title": "SportsGG Extra Bonus Parlay 100%",
+      "image": "/assets/f9386c962285e95b.webp",
+      "coverImage": "/assets/f9386c962285e95b.webp",
+      "banner": null,
+      "category": "sports",
+      "period": "Program promosi • Pratinjau",
+      "summary": "Jelajahi program dan detail promosi pilihan. Ketentuan serta periode aktif akan mengikuti konfigurasi agen Playground.",
+      "terms": [
+        "Penawaran ini ditampilkan sebagai contoh UI.",
+        "Bonus dan progres pada pratinjau menggunakan data demo.",
+        "Ketersediaan program mengikuti pengaturan agen saat integrasi."
+      ]
+    },
+    {
+      "id": "g721",
+      "title": "Program 721",
+      "image": "/assets/18144c5f9d3bb644.webp",
+      "coverImage": null,
+      "banner": "/assets/18144c5f9d3bb644.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g574",
+      "title": "Program 574",
+      "image": "/assets/32d09a41a9553f6c.webp",
+      "coverImage": null,
+      "banner": "/assets/32d09a41a9553f6c.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g575",
+      "title": "Program 575",
+      "image": "/assets/7b229a4ba1a41fb9.webp",
+      "coverImage": null,
+      "banner": "/assets/7b229a4ba1a41fb9.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g737",
+      "title": "Program 737",
+      "image": "/assets/d78b7532e0f400d9.webp",
+      "coverImage": null,
+      "banner": "/assets/d78b7532e0f400d9.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g589",
+      "title": "Program 589",
+      "image": "/assets/f441792fdd03854b.webp",
+      "coverImage": null,
+      "banner": "/assets/f441792fdd03854b.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g754",
+      "title": "Program 754",
+      "image": "/assets/54bb3c2e4da95a21.webp",
+      "coverImage": null,
+      "banner": "/assets/54bb3c2e4da95a21.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g756",
+      "title": "Program 756",
+      "image": "/assets/d97d04929e2bd54d.webp",
+      "coverImage": null,
+      "banner": "/assets/d97d04929e2bd54d.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    },
+    {
+      "id": "g566",
+      "title": "Program 566",
+      "image": "/assets/88f625eae7712a0d.webp",
+      "coverImage": null,
+      "banner": "/assets/88f625eae7712a0d.webp",
+      "category": "slots",
+      "period": "Pratinjau promosi",
+      "summary": "Lihat visual program promosi dan simulasi workflow klaim.",
+      "terms": [
+        "Data dan klaim hanya untuk simulasi UI.",
+        "Ketentuan final mengikuti konfigurasi agen."
+      ]
+    }
+  ]
+}

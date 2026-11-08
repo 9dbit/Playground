@@ -76,6 +76,7 @@ function createAuth({ pool, master, production = false }) {
       username: a.username,
       display_name: a.display_name,
       role: a.role,
+      profile: a.kind === "player" ? a.profile || {} : undefined,
       permissions: a.kind === "staff" ? roles[a.role] : [],
       mfa_enabled: a.mfa_enabled || false,
       setup_required: a.kind === "staff" && !a.mfa_enabled,

@@ -1408,6 +1408,26 @@ async function main() {
       assert.equal(mismatch.length, 0);
     },
   );
+  await check("STOREFRONT", "64COR bootstrap, published manifest and player tenant binding", async () => {
+    const {ensure64cor}=require('../engine/agency/storefront');
+    const t=await ensure64cor(pool);assert.equal((await ensure64cor(pool)).id,t.id);
+    const site=await ok('/api/storefront/64cor','GET',undefined,null);
+    assert.equal(site.tenant.slug,'64cor');assert.ok(site.pages.some(x=>x.slug==='home'));
+    await topup(t.id,1000000);
+    const a=await req('/api/player/me','GET',undefined,'playerA',{'X-Playground-Tenant':'64cor'});
+    assert.equal(a.status,403);
+    assert.equal((await req('/api/player/auth/login','POST',{tenant:A.slug,username:'playerA',password},null,{'X-Playground-Tenant':'64cor'})).status,403);
+    await player({id:t.id,slug:'64cor'},'corApi');
+    await ok('/api/player/profile','PUT',{name:'Persisted profile',email:'qa@example.test'},'corApi');
+    await ok('/api/player/preferences','PUT',{favorites:['soft-tech-uno-luck'],read_messages:[]},'corApi');
+    const actor=await ok('/api/player/me','GET',undefined,'corApi');assert.equal(actor.display_name,'Persisted profile');assert.equal(actor.profile.email,'qa@example.test');assert.deepEqual(actor.profile.favorites,['soft-tech-uno-luck']);
+    assert.equal((await req('/api/player/auth/password','POST',{current_password:'wrong',password:password+'new'},'corApi')).status,401);
+    await ok('/api/player/auth/password','POST',{current_password:password,password:password+'new'},'corApi');
+    assert.equal((await req('/api/player/me','GET',undefined,'corApi')).status,401);
+    assert.equal((await req('/api/player/auth/login','POST',{tenant:'64cor',username:'player_corapi',password},null)).status,401);
+    assert.equal((await req('/api/player/auth/login','POST',{tenant:'64cor',username:'player_corapi',password:password+'new'},null)).status,200);
+    return {tenant:t.id,pages:site.pages.length,games:site.games.length};
+  });
   if (process.env.AGENCY_BROWSER === "true")
     await check(
       "BROWSER",
@@ -1461,7 +1481,7 @@ async function main() {
           assert.equal(new URL(anonymous.url()).pathname, "/login");
           assert.equal(await anonymous.locator("#playground-chatvice-script").count(), 0);
           await anonymous.close();
-          await page.goto(base + "/agents");
+          await page.goto(base + "/agents?tenant_id=" + A.id);
           await page
             .getByRole("heading", { name: "Ringkasan", exact: true })
             .waitFor();
@@ -1522,6 +1542,49 @@ async function main() {
           await page
             .getByRole("heading", { name: "Masuk akun", exact: true })
             .waitFor();
+          if(process.env.STOREFRONT_PATH){
+            process.env.PLAYGROUND_API_ORIGIN=base;
+            const {server: storefront}=await import(require('node:url').pathToFileURL(path.join(process.env.STOREFRONT_PATH,'server.mjs')).href);
+            await new Promise(r=>storefront.listen(0,'127.0.0.1',r));
+            const corBase='http://127.0.0.1:'+storefront.address().port;
+            const cor=await browser.newPage();
+            cor.on('pageerror',e=>errors.push(e.message));
+            try {
+              await cor.route('https://chatvice.app/**',r=>r.fulfill({body:'',contentType:'application/javascript'}));
+              await cor.goto(corBase+'/user');
+              await cor.getByRole('button',{name:'Daftar',exact:true}).click();
+              await cor.locator('[name="username"]').fill('cor_test');
+              await cor.locator('[name="password"]').fill(password);
+              await cor.locator('[name="confirm"]').fill(password);
+              await cor.locator('form[data-form="auth"] button[type="submit"]').click();
+              await cor.locator('form[data-form="profile"]').waitFor();
+              await cor.locator('form[data-form="profile"] [name="name"]').fill('COR Player');
+              await cor.locator('form[data-form="profile"] [type="submit"]').click();
+              await cor.waitForFunction(()=>document.querySelector('.account-sidebar h3')?.textContent==='COR Player');
+              await cor.goto(corBase+'/deposit');
+              await cor.locator('[name="amount"]').fill('50000');
+              await cor.locator('form[data-form="transaction"] [type="submit"]').click();
+              await cor.getByRole('dialog',{name:'Detail transaksi'}).waitFor();
+              assert.ok((await pool.query("SELECT id FROM agency_transactions WHERE tenant_id=(SELECT id FROM agency_tenants WHERE slug='64cor')")).rowCount===1);
+              await cor.reload();
+              await cor.getByRole('button',{name:'Detail',exact:true}).first().waitFor();
+              const tenant=(await pool.query("SELECT id FROM agency_tenants WHERE slug='64cor'")).rows[0];
+              const home=(await ok('/api/admin/agency/tenants/'+tenant.id+'/content')).items.find(x=>x.slug==='home');
+              const pixels=await require('sharp')({create:{width:600,height:200,channels:3,background:'#ee2255'}}).png().toBuffer();
+              const asset=await ok('/api/admin/agency/tenants/'+tenant.id+'/banner-upload','POST',{image:'data:image/png;base64,'+pixels.toString('base64')});
+              const changed=await ok('/api/admin/agency/tenants/'+tenant.id+'/content/home','PUT',{content:{...home.draft,title:'64COR CMS synced',banner_url:asset.url},expected_version:home.version});
+              await ok('/api/admin/agency/tenants/'+tenant.id+'/content/'+home.id+'/publish','POST',{expected_version:changed.version});
+              await cor.setViewportSize({width:390,height:844});await cor.goto(corBase+'/');
+              await cor.waitForFunction(()=>document.title==='64COR CMS synced');
+              await cor.waitForFunction(()=>{const img=document.querySelector('.hero-slide.active img');return img?.complete&&img.naturalWidth===600;});
+              assert.ok(await cor.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+              await cor.screenshot({path:path.join(__dirname,'../test-results/64cor-connected-mobile.png'),fullPage:true});
+              await cor.goto(corBase+'/contact');await cor.locator('[name="subject"]').fill('Integration QA');await cor.locator('[name="message"]').fill('Test support ticket');
+              await cor.locator('form[data-form="support"] button').click();
+              await cor.getByRole('dialog',{name:'Tiket terkirim'}).waitFor();
+              assert.ok((await pool.query('SELECT id FROM agency_tickets WHERE tenant_id=$1',[tenant.id])).rowCount===1);
+            } finally {await cor.close();await new Promise(r=>storefront.close(r));}
+          }
           assert.deepEqual(errors, []);
           return { pageErrors: 0, viewports: [1440, 390], masterChatvicePages: 6, masterMerchantIsolated: true };
         } finally {

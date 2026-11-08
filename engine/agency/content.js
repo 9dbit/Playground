@@ -40,11 +40,13 @@ function validate(p) {
     "chatvice_merchant",
     "chatvice_enabled",
     "analytics_id",
+    "link_url",
   ];
   if (Object.keys(p).some((k) => !allowed.includes(k)))
     fail(400, "Field konten tidak dikenal");
   const out = {
     title: text(p.title, 160),
+    link_url: url(p.link_url),
     description: String(p.description || "").slice(0, 300),
     body: String(p.body || "").slice(0, 20000),
     banner_url: url(p.banner_url),
@@ -71,6 +73,7 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
   let renderSitemap;
   let renderRobots;
   async function siteBase(t) {
+    if (t.slug === "64cor") return "https://playground-agent-frontend-production.up.railway.app";
     const primary = (
       await pool.query(
         "SELECT domain FROM agency_domains WHERE tenant_id=$1 AND verified_at IS NOT NULL AND is_primary",
@@ -138,6 +141,7 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
       const tenant = (
         await db.query("SELECT slug FROM agency_tenants WHERE id=$1", [t])
       ).rows[0];
+      if (tenant.slug === "64cor" && new URL(p.canonical).origin === "https://playground-agent-frontend-production.up.railway.app") return;
       const u = new URL(p.canonical),
         base = "/site/" + tenant.slug;
       if (
@@ -162,6 +166,8 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
     return q.rows[0];
   }
   function mount(app) {
+    app.get("/site/64cor", (req,res) => res.redirect(302,"https://playground-agent-frontend-production.up.railway.app/"));
+    app.get("/site/64cor/p/:page", (req,res) => res.redirect(302,"https://playground-agent-frontend-production.up.railway.app/" + (req.params.page.startsWith("promo-") ? "promotions/all/" + encodeURIComponent(req.params.page) : "")));
     // Immutable, public website assets; retained for content revision rollback.
     app.get("/media/agency/:tenant/:asset.webp", wrap(async (req, res) => {
       const t = id(req.params.tenant);

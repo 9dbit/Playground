@@ -72,7 +72,8 @@ app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?chatvice.origin:'';
-  if(widgetOrigin)res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${widgetOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${widgetOrigin} data: blob:; connect-src 'self' ${widgetOrigin} ${widgetOrigin.replace(/^https:/,'wss:')}; frame-src ${widgetOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
+  if(widgetOrigin)res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${widgetOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${widgetOrigin} https://playground-agent-frontend-production.up.railway.app data: blob:; connect-src 'self' ${widgetOrigin} ${widgetOrigin.replace(/^https:/,'wss:')}; frame-src ${widgetOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
+  if(req.path.replace(/\/$/,'')==='/agency'&&!widgetOrigin)res.setHeader('Content-Security-Policy',res.getHeader('Content-Security-Policy').replace("img-src 'self'","img-src 'self' https://playground-agent-frontend-production.up.railway.app"));
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
@@ -129,6 +130,7 @@ app.get('/health', route(async (req, res) => {
   catch { res.status(503).json({ status: 'degraded', db: 'unavailable' }); }
 }));
 app.use(agencyContent.domainRouter);
+app.use("/api/player", require("./engine/agency/storefront").bindTenant(pool));
 security.mount(app);
 app.get('/', (req, res) => res.redirect('/engine'));
 app.get('/engine', security.protectedPage('control.html'));
@@ -254,6 +256,7 @@ adminOps.mount(app,{pool});
 publicContent.mount(app,{pool});
 agency.mount(app);
 agencyContent.mount(app);
+require("./engine/agency/storefront").mount({ app, pool, agency });
 mountOperations(app,{pool,agency,chatvice});
 app.use('/api',(req,res)=>error(res,404,'API endpoint not found'));
 app.use((req,res)=>error(res,404,'Not found'));
@@ -265,7 +268,8 @@ app.use((err,req,res,next)=>{
  const status=err.type==='entity.too.large'?413:err.type==='entity.parse.failed'||err.code==='22P02'?400:err.code==='23505'?409:500;
  res.status(status).json({error:status===400?'Invalid request':status===409?'Record conflicts with existing data':'Request could not be completed'});
 });
-if(require.main===module)initDB().then(()=>{
+if(require.main===module)initDB().then(async()=>{
+ if (process.env.DATABASE_SCHEMA === "agency_sandbox_v1") await require("./engine/agency/storefront").ensure64cor(pool);
  const server=app.listen(PORT,'0.0.0.0',()=>console.log('Playground GameOps '+VERSION+' listening on '+PORT+' at '+iso()));
  const stopScheduler=adminOps.startScheduler(pool,{onError:e=>console.error('[maintenance-job]',e.code||e.message)});
  const stopAgency=agency.startWorker();

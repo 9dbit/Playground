@@ -261,7 +261,7 @@
         .map((x) => `<a href="#${x[0]}" data-view="${x[0]}">${E(x[1])}</a>`)
         .join(
           "",
-        )}</nav><div class="meta"><small>Satu platform. Akses sesuai peran.</small>${master ? '<p><a href="/engine">Kembali ke GameOps</a></p>' : '<p><button id="logout" class="small quiet">Keluar</button></p>'}</div></aside><main class="workspace"><div class="topbar"><div><p class="eyebrow">${E(selected?.name || "PLATFORM AGEN")}</p><h1 id="page-title">Ringkasan</h1></div><div class="actions">${selected ? `<a class="button secondary small" href="/site/${E(selected.slug)}" target="_blank" rel="noopener">Lihat website</a>` : ""}<button id="refresh" class="quiet small">Refresh</button></div></div><div id="body"></div></main></div>`;
+        )}</nav><div class="meta"><small>Satu platform. Akses sesuai peran.</small>${master ? '<p><a href="/engine">Kembali ke GameOps</a></p>' : '<p><button id="logout" class="small quiet">Keluar</button></p>'}</div></aside><main class="workspace"><div class="topbar"><div><p class="eyebrow">${E(selected?.name || "PLATFORM AGEN")}</p><h1 id="page-title">Ringkasan</h1></div><div class="actions">${selected ? `<a class="button secondary small" href="${selected.slug === "64cor" ? "https://playground-agent-frontend-production.up.railway.app" : "/site/" + E(selected.slug)}" target="_blank" rel="noopener">Lihat website</a>` : ""}<button id="refresh" class="quiet small">Refresh</button></div></div><div id="body"></div></main></div>`;
     if (master) {
       $("#new-tenant").onclick = newTenant;
       $("#tenant-select").onchange = async (e) => {
@@ -962,9 +962,10 @@
           '<div class="toolbar">' +
           button("new-content", "", "Tambah halaman") +
           button("domains", "", "Domain & HTTPS") +
+          '<p class="muted">64COR: home = banner utama; banner-01, banner-02, dst. = slide tambahan; promo-01, dst. = promosi. Edit lalu Publish. Kosongkan gambar untuk menghapus slide.</p>' +
           '</div><div class="card">' +
           table(
-            ["Halaman", "Judul", "Versi", "Publikasi", ""],
+            ["Halaman / Banner / Promosi", "Judul", "Versi", "Publikasi", ""],
             r.items.map((x) => [
               E(x.slug),
               E(x.draft.title),
@@ -990,6 +991,7 @@
               ) +
               field("body", "Konten", c?.draft.body || "", "textarea") +
               field("banner_url", "URL banner", c?.draft.banner_url || "") +
+              field("link_url", "Link tujuan banner / promosi", c?.draft.link_url || "") +
               field(
                 "canonical",
                 "Canonical (kosong = otomatis)",
@@ -1017,7 +1019,8 @@
                 ],
               ),
             async (p) => {
-              const { slug: s, ...content } = p;
+              const { slug: s, ...fields } = p;
+              const content = { ...c?.draft, ...fields };
               content.banner_url = await saveBanner();
               content.chatvice_enabled = p.chatvice_enabled === "true";
               return api(
