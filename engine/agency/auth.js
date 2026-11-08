@@ -48,14 +48,14 @@ function createAuth({ pool, master, production = false }) {
         fail(403, "Cross-site request rejected");
     }
   }
-  async function throttle(key, db = pool) {
+  async function throttle(key, db = pool, max = 30) {
     const q = await db.query(
       `INSERT INTO gameops_auth_buckets(key,hits,expires_at) VALUES($1,1,now()+interval '15 minutes')
  ON CONFLICT(key) DO UPDATE SET hits=CASE WHEN gameops_auth_buckets.expires_at<now() THEN 1 ELSE gameops_auth_buckets.hits+1 END,
  expires_at=CASE WHEN gameops_auth_buckets.expires_at<now() THEN now()+interval '15 minutes' ELSE gameops_auth_buckets.expires_at END RETURNING hits`,
       [C.sha("agency:" + key)],
     );
-    if (q.rows[0].hits > 30)
+    if (q.rows[0].hits > max)
       fail(429, "Terlalu banyak percobaan, coba lagi nanti");
   }
   function token(req, kind) {
@@ -97,6 +97,7 @@ function createAuth({ pool, master, production = false }) {
     );
     if (!q.rowCount) return null;
     const a = q.rows[0];
+    if (a.tenant_status === "closed") return null;
     if (req.agencySite && req.agencySite.id !== a.tenant_id)
       fail(403, "Session bukan milik website ini");
     if (
@@ -225,13 +226,13 @@ function createAuth({ pool, master, production = false }) {
         prefix + "/auth/login",
         wrap(async (req, res) => {
           origin(req);
-          await throttle(
-            "login:" + req.ip + ":" + String(req.body?.username || ""),
-          );
-          if (req.agencySite && req.agencySite.slug !== req.body?.tenant)
-            fail(403, "Website agen berbeda");
           const p = req.body || {},
             u = String(p.username || "").trim().toLowerCase();
+          // One budget for equivalent account identifiers; separate tenant/kind scopes.
+          await throttle("login-ip:" + req.ip, pool, 180);
+          await throttle("login-account:" + JSON.stringify([kind, String(p.tenant || ""), u, req.ip]));
+          if (req.agencySite && req.agencySite.slug !== req.body?.tenant)
+            fail(403, "Website agen berbeda");
           const tenant = (
             await pool.query("SELECT * FROM agency_tenants WHERE slug=$1", [
               String(p.tenant || ""),
@@ -291,10 +292,10 @@ function createAuth({ pool, master, production = false }) {
       app.post(
         prefix + "/auth/logout",
         wrap(async (req, res) => {
-          await pool.query(
-            "DELETE FROM agency_sessions WHERE tenant_id=$1 AND id=$2",
-            [req.agency.tenant_id, req.agency.session_id],
-          );
+          await transaction(pool, async db => {
+            await db.query("DELETE FROM agency_sessions WHERE tenant_id=$1 AND id=$2", [req.agency.tenant_id, req.agency.session_id]);
+            await audit(db, req.agency.tenant_id, req.agency.id, "auth.logout", req.agency.id, {kind});
+          });
           res.clearCookie(cookies[kind], { ...options, maxAge: undefined });
           res.json({ ok: true });
         }),

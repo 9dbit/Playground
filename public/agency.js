@@ -44,8 +44,24 @@
     } catch {
       throw Error("Respons tidak valid");
     }
-    if (!r.ok || r.status === 202)
-      throw Error(data.error || data.code || "Request gagal");
+    if (!r.ok || r.status === 202) {
+      const error = Object.assign(new Error(data.error || data.code || "Request gagal"), {status:r.status, code:data.code});
+      if (r.status === 401 && data.code === "LOGIN_REQUIRED" && me) {
+        const slug = me.tenant?.slug;
+        me = null; csrf = "";
+        for (const dialog of document.querySelectorAll("dialog")) { dialog.close(); dialog.replaceChildren(); }
+        dispatchEvent(new Event("agency:logout"));
+        if (master) returnToLogin();
+        else {
+          const current = new URL(location.href);
+          if (slug) current.searchParams.set("tenant", slug);
+          history.replaceState(null, "", current);
+          login();
+          toast("Sesi berakhir. Silakan masuk kembali.");
+        }
+      }
+      throw error;
+    }
     return data;
   }
   const api = (p, m, b) => request(base + p, m, b);
@@ -75,7 +91,8 @@
         toast("Tersimpan");
         await render();
       } catch (err) {
-        d.querySelector(".error").textContent = err.message;
+        const message = d.querySelector(".error");
+        if (message) message.textContent = err.message;
       } finally {
         b.disabled = false;
       }
@@ -253,22 +270,30 @@
     ["support", "Bantuan", "support"],
     ["audit", "Audit", "audit"],
   ];
+  function returnToLogin() {
+    location.replace("/login?return_to=" + encodeURIComponent(location.pathname + location.search + location.hash));
+  }
+  function startupError(error) {
+    $("#app").innerHTML = `<main class="login-card"><h1>Workspace belum dapat dibuka</h1><p role="alert">${E(error.message || "Koneksi terputus. Coba lagi.")}</p><button id="retry-workspace">Coba lagi</button>${master ? '<p><a href="/engine">Dashboard master</a></p>' : ''}</main>`;
+    $("#retry-workspace").onclick = () => start();
+  }
   async function start() {
     if (!me) {
       try {
         me = await request(master ? "/api/auth/session" : "/api/agency/me");
         csrf = me.csrf;
-      } catch {
-        if (master) {
-          location.href = "/login";
-          return;
-        }
+      } catch (error) {
+        if (error.status !== 401) return startupError(error);
+        if (master) return returnToLogin();
         return login();
       }
     }
+    if (master && me.setupRequired) { location.replace("/security"); return; }
     if (!master && me.setup_required) return enroll();
     if (master) {
-      tenants = (await request("/api/admin/agency/tenants")).items;
+      if (me.role !== "owner") return startupError(new Error("Akun ini tidak memiliki akses pengelolaan agen. Gunakan akun master Owner."));
+      try { tenants = (await request("/api/admin/agency/tenants")).items; }
+      catch (error) { if (error.code !== "LOGIN_REQUIRED") startupError(error); return; }
       if (!tenants.some((x) => x.id === tenant)) tenant = tenants[0]?.id || "";
     } else tenant = me.tenant.id;
     if (master && tenant) {

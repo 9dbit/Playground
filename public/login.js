@@ -25,7 +25,15 @@ document.getElementById('login-form').addEventListener('submit', async event => 
       message.textContent = data.error; return;
     }
     if (!response.ok) throw new Error(data.error || 'Sign-in failed');
-    location.replace(data.setupRequired ? '/security' : '/engine');
+    let destination = '/engine';
+    const requested = new URLSearchParams(location.search).get('return_to');
+    if (requested) {
+      try {
+        const target = new URL(requested, location.origin);
+        if (target.origin === location.origin && ['/agents','/engine'].includes(target.pathname.replace(/\/$/,'')) && !target.username && !target.password) destination = target.pathname + target.search + target.hash;
+      } catch { /* Invalid return addresses use the master dashboard. */ }
+    }
+    location.replace(data.setupRequired ? '/security' : destination);
   } catch (error) { message.textContent = error.message || 'Connection failed. Try again.'; }
   finally { button.disabled = false; }
 });
