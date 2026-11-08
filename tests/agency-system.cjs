@@ -1505,6 +1505,10 @@ async function main() {
             assert.equal(await page.locator("#chatvice-widget-frame").count(), 1);
           }
           assert.equal(widgetRequests.length, 6);
+          await page.goto(base + '/engine');
+          await page.locator('.sidebar [data-agency-link]').waitFor();
+          assert.equal(await page.locator('.sidebar [data-agency-link]').getAttribute('href'), '/agents');
+
           for (const url of widgetRequests) assert.equal(url, "https://chatvice.app/api/widget/chatvice.js?merchant=m_36f76fcbe11167ed&v=1793889257");
           for (const privatePath of ["/security", "/agency"]) {
             const response = await page.goto(base + privatePath);
@@ -1532,6 +1536,8 @@ async function main() {
           });
           await page.setViewportSize({ width: 390, height: 844 });
           await page.goto(base + "/agents#coins");
+          await page.getByRole('link', {name:'← Master Playground', exact:true}).waitFor();
+          assert.ok(await page.getByRole('link', {name:'← Master Playground', exact:true}).isVisible());
           await page
             .getByRole("heading", { name: "Stok koin", exact: true })
             .waitFor();
