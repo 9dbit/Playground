@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-11-08T08:54:50.989527+00:00",
+  "environment": "sandbox",
+  "moneyTransferred": false,
+  "paidRounds": 0,
+  "accountPurpose": "Synthetic zero-coin UAT; identity omitted",
+  "games": [
+    {
+      "game": "mahjong-wild",
+      "source_commit": "d75ea42af04bbd027fecc64408f7cb52d1d4cfdf",
+      "health": "database connected",
+      "studio": {
+        "enabled": true,
+        "last_sync": 1794128034.212351,
+        "error": ""
+      },
+      "catalog": "Active/publishable",
+      "launch": "64COR launch \u2192 native redeem \u2192 central state",
+      "balance": 0,
+      "reserved": 0,
+      "coin_scale": 0,
+      "guestReset": "unavailable",
+      "anonymousWalletStatus": 401,
+      "anonymousContextStatus": 401,
+      "navigation": {
+        "home_url": "https://playground-agent-frontend-production.up.railway.app",
+        "label": "64COR",
+        "expiryFuture": true,
+        "redeemContextAndStateAgree": true
+      }
+    },
+    {
+      "game": "skygate-5000",
+      "source_commit": "e323b3b8ae8cf963f3f4ee0caa5a9f3445f2d9fa",
+      "health": "database connected",
+      "studio": {
+        "enabled": true,
+        "last_sync": "2026-11-08T08:54:20.500Z",
+        "error": ""
+      },
+      "catalog": "Active/publishable",
+      "launch": "64COR launch \u2192 native redeem \u2192 central state",
+      "balance": 0,
+      "reserved": 0,
+      "coin_scale": 0,
+      "guestReset": "unavailable",
+      "anonymousWalletStatus": 401,
+      "anonymousContextStatus": 401,
+      "navigation": {
+        "home_url": "https://playground-agent-frontend-production.up.railway.app",
+        "label": "64COR",
+        "expiryFuture": true,
+        "redeemContextAndStateAgree": true
+      }
+    }
+  ],
+  "nativeCookies": "Secure / HttpOnly / SameSite Strict",
+  "unoRegression": "existing key, native launch and zero-coin central wallet pass"
+}

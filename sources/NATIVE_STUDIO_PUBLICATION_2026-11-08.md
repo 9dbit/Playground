@@ -39,3 +39,19 @@ Enable `AGENCY_STUDIO_SYNC=1` only on the existing Mahjong and Skygate agency sa
 The original master/Studio production services and main branches are not changed. Source Studio export buttons are included in the native feature PRs; the original Studio production deployments require their own release. The deployed master panel's built-in controls and package upload are usable independently of those export buttons.
 
 This is not live wagering/RTP certification. Native PostgreSQL load certification and real payment/email/SMS/KYC/OAuth provider setup remain separate from this sandbox publication path.
+
+## Deployed source verification
+
+| Service | Source commit | Terminal Railway deployment |
+|---|---|---|
+| Playground agent sandbox | `e5edab1aa16246efc1db3961f9f59912af8a9f2a` | `5e6df3d6-051d-4749-a54d-d67871684a7d` — SUCCESS |
+| Mahjong agency sandbox | `d75ea42af04bbd027fecc64408f7cb52d1d4cfdf` | `45833cac-27bf-478c-a912-db0b64854b74` — SUCCESS |
+| Skygate agency sandbox | `e323b3b8ae8cf963f3f4ee0caa5a9f3445f2d9fa` | `aec5f74e-3a45-4014-8b45-6c7e5a914ddd` — SUCCESS |
+
+Both native health endpoints confirm Studio sync enabled, a recent successful sync and no error. The master page redirects anonymous users to login; its new script is served successfully. A transient Railway dependency-download 504 during the catalog update was recovered by redeployment.
+
+Local integration evidence: [native-studio-local-2026-11-08.json](evidence/native-studio-local-2026-11-08.json).
+
+Deployed zero-coin smoke also passes: 64COR registration → launch → native redeem → context/state for both games, catalog release SHA equals the running source, balance/reserved remain zero, and the canonical return address is 64COR. The existing UNO launch/key still works. No paid rounds or funds transfers were performed on deployed services. Evidence: [native-studio-deployed-2026-11-08.json](evidence/native-studio-deployed-2026-11-08.json).
+
+CI records: [Mahjong engine/browser/Studio](https://github.com/9dbit/Mahjong-legend/actions/runs/42464368122), [Skygate QA](https://github.com/9dbit/Skygate/actions/runs/42464378241), [Skygate audio](https://github.com/9dbit/Skygate/actions/runs/42464378279), [Skygate iPhone viewport](https://github.com/9dbit/Skygate/actions/runs/42464378212).

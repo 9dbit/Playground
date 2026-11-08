@@ -298,3 +298,7 @@ Pekerjaan konkret berikutnya adalah A dan B: jadikan capability aktual transpara
 | Chatvice embed/identity examples | [widget.tsx](https://github.com/9dbit/Chatvice/blob/1c0f9429b8517ce82a40b5a0e19899113c24e352/client/src/pages/dashboard/widget.tsx#L923) |
 
 Rujukan publik diakses 3 November 2026. Informasi vendor dipakai sebagai benchmark fitur, bukan bukti performa Playground atau rekomendasi pembelian. Roadmap di dokumen ini adalah usulan; tidak ada klaim modul agen, payment, atau widget sudah dipasang.
+
+## Pembaruan implementasi — 8 November 2026
+
+UNO, Mahjong dan Skygate telah menggunakan wallet pusat pada sandbox melalui runtime native. Publikasi konfigurasi Studio Mahjong/Skygate kini tersedia dari master **Manage Games → Rilis Studio**: simpan paket, validasi oleh game, penerbitan eksplisit dengan verifikasi master, konfirmasi penerapan dan rollback. Akun agen tetap hanya dapat memilih game yang diberi entitlement. Lihat [bukti implementasi dan batas pengujian](NATIVE_STUDIO_PUBLICATION_2026-11-08.md). Matriks awal di atas adalah snapshot riset 3 November, bukan status deploy terbaru.
