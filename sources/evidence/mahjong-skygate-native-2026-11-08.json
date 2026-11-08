@@ -13,10 +13,13 @@
         "storefrontLaunchAndReturn": true,
         "browser": "Chromium 393x852",
         "restart": true,
-        "settledRounds": 1,
+        "settledRounds": 2,
         "settlementJournalsPerRound": 1,
         "ledgerDifferences": 0,
-        "productionContacted": false
+        "productionContacted": false,
+        "returnButton": true,
+        "unknownResponseThenLeave": true,
+        "expiredSessionGuidance": true
       }
     },
     {
@@ -27,10 +30,13 @@
         "storefrontLaunchAndReturn": true,
         "browser": "Chromium 393x852",
         "restart": true,
-        "settledRounds": 3,
+        "settledRounds": 4,
         "settlementJournalsPerRound": 1,
         "ledgerDifferences": 0,
-        "productionContacted": false
+        "productionContacted": false,
+        "returnButton": true,
+        "unknownResponseThenLeave": true,
+        "expiredSessionGuidance": true
       }
     }
   ],
@@ -41,7 +47,7 @@
     "skygatePass": 118
   },
   "backendUnit": {
-    "pass": 60,
+    "pass": 62,
     "skip": 5
   }
 }

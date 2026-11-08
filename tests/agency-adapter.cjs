@@ -4,16 +4,16 @@ module.exports=async({pool,runtime,check,player,A,B,topup,paid,ok,base,gameSecre
  await check('ACT_ADAPTER','Node/Python signed wallet clients recover redeem responses and reconcile exact central round state',async()=>{
   const p=await player(A,'adapterPlayer');await topup(A.id,1000);await paid(A.id,'adapterPlayer',500);
   const gid=(await pool.query("SELECT id FROM gameops_games WHERE slug='uno-luck'")).rows[0].id;
-  const launch=await ok('/api/player/launch','POST',{game_id:gid},'adapterPlayer');
+  const launch=await ok('/api/player/launch','POST',{game_id:gid,return_url:'https://untrusted.invalid/'},'adapterPlayer');
   const client=require('../adapters/agency-wallet.cjs').createAgencyWallet({origin:base,keyId:'qa-uno',secret:gameSecret,allowLocal:true});
-  const request=crypto.randomUUID(),session=await client.redeem(launch.token,request);const replay=await client.redeem(launch.token,request);assert.equal(replay.session_id,session.session_id);assert.equal(session.balance,'500');
+  const request=crypto.randomUUID(),session=await client.redeem(launch.token,request);const replay=await client.redeem(launch.token,request);assert.equal(replay.session_id,session.session_id);assert.equal(session.balance,'500');assert.equal(session.navigation.home_url,base+'/site/'+A.slug);assert.equal(session.navigation.label,A.name);assert.ok(Date.parse(session.expires_at)>Date.now()+119*60000);
   await assert.rejects(()=>client.redeem(launch.token,'different-request'),e=>e.status===409);
   const body={tenant_id:A.id,session_id:session.session_id,round_ref:'adapter:'+crypto.randomUUID(),stake:'100',max_payout:'200'};
   const r=await client.reserve(body);assert.equal((await client.reserve(body)).id,r.id);const status=await client.status({...body});assert.equal(status.balance,'400');assert.equal(status.reserved,'100');assert.equal(status.rounds[0].state,'reserved');
   await pool.query("UPDATE agency_launches SET expires_at=now()-interval '1 second' WHERE id=$1",[session.session_id]);
   assert.equal((await client.reserve(body)).id,r.id);
   await assert.rejects(()=>client.reserve({...body,round_ref:'new-after-expiry'}),e=>e.status===401);
-  const closed={tenant_id:A.id,round_id:r.id,payout:'150',evidence:'Server outcome fixture, not native game UAT'};await client.settle(closed);await client.settle(closed);assert.equal((await client.status(body)).balance,'550');
+  const closed={tenant_id:A.id,round_id:r.id,payout:'150',evidence:'Server outcome fixture, not native game UAT'};await client.settle(closed);await client.settle(closed);const recovered=await client.status(body);assert.equal(recovered.balance,'550');assert.equal(recovered.navigation.home_url,session.navigation.home_url);assert.ok(Date.parse(recovered.expires_at)<Date.now());
   await assert.rejects(()=>client.status({...body,tenant_id:B.id}),e=>e.status===403);
   const {spawn}=require('node:child_process');
   const py=spawn(process.env.CODEX_PRIMARY_RUNTIME_PYTHON||'python',['-c',"import sys,json;from adapters.agency_wallet import AgencyWallet;p=json.load(sys.stdin);c=AgencyWallet(p['origin'],p['key'],p['secret'],allow_local=True);print(json.dumps(c.request('status',p['payload'])))"],{cwd:require('node:path').join(__dirname,'..'),stdio:['pipe','pipe','pipe']});

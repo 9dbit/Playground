@@ -89,18 +89,7 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
   let renderPage;
   let renderSitemap;
   let renderRobots;
-  async function siteBase(t) {
-    if (t.slug === "64cor") return "https://playground-agent-frontend-production.up.railway.app";
-    const primary = (
-      await pool.query(
-        "SELECT domain FROM agency_domains WHERE tenant_id=$1 AND verified_at IS NOT NULL AND is_primary",
-        [t.id],
-      )
-    ).rows[0];
-    return primary
-      ? "https://" + primary.domain
-      : publicOrigin + "/site/" + t.slug;
-  }
+  const siteBase = t => require('./storefront-location').storefrontURL(pool,t,publicOrigin);
   const domainRouter = wrap(async (req, res, next) => {
     if (req.hostname === new URL(publicOrigin).hostname) return next();
     const site = (

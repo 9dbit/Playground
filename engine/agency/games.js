@@ -15,7 +15,8 @@ const {
   balance,
 } = require("./core");
 const { playerCode } = require("./cashier");
-function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
+const {gameNavigation} = require("./storefront-location");
+function createGames({ pool, gameKeys = [], publicOrigin = "http://localhost:3000", checkMaintenance = async()=>{} }) {
   const keys = new Map();
   for (const k of gameKeys) {
     if (
@@ -103,12 +104,15 @@ function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
         fail(409, "Launch token sudah digunakan atau kedaluwarsa");
       if(!fresh.redeemed_at){
       await entitled(db, t, l.game_id);
-      await db.query(
-        "UPDATE agency_launches SET redeemed_at=now(),expires_at=now()+interval '2 hours',redeem_request=$3 WHERE tenant_id=$1 AND id=$2",
+      const updated = await db.query(
+        "UPDATE agency_launches SET redeemed_at=now(),expires_at=now()+interval '2 hours',redeem_request=$3 WHERE tenant_id=$1 AND id=$2 RETURNING expires_at",
         [t.id, l.id, request ? C.sha(request) : null],
       );
+      fresh.expires_at = updated.rows[0].expires_at;
       }
       return {
+        navigation: await gameNavigation(db,t,publicOrigin),
+        expires_at: fresh.expires_at,
         session_id: l.id,
         tenant_id: t.id,
         player_id: l.player_id,
@@ -276,7 +280,7 @@ function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
     return locked(pool,id(p.tenant_id),async(db,t)=>{
       const l=await session(db,t,p.session_id,scope,false);
       const rounds=(await db.query("SELECT id,round_ref,stake::text,payout::text,state,created_at,settled_at FROM agency_rounds WHERE tenant_id=$1 AND launch_id=$2 AND ($3::text IS NULL OR round_ref=$3) ORDER BY created_at DESC LIMIT 100",[t.id,l.id,p.round_ref===undefined?null:text(p.round_ref,120)])).rows;
-      return {session_id:l.id,tenant_id:t.id,player_id:l.player_id,currency:t.currency,coin_scale:t.coin_scale,expires_at:l.expires_at,balance:String(await balance(db,t.id,playerCode(l.player_id))),reserved:String(await balance(db,t.id,playerCode(l.player_id,'reserved'))),rounds};
+      return {navigation:await gameNavigation(db,t,publicOrigin),session_id:l.id,tenant_id:t.id,player_id:l.player_id,currency:t.currency,coin_scale:t.coin_scale,expires_at:l.expires_at,balance:String(await balance(db,t.id,playerCode(l.player_id))),reserved:String(await balance(db,t.id,playerCode(l.player_id,'reserved'))),rounds};
     });
   }
   async function verify(req) {

@@ -23,8 +23,11 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
    try{
     await start();browser=await require('playwright').chromium.launch({headless:true,args:['--no-sandbox']});
     process.env.PLAYGROUND_API_ORIGIN=base;({server:storefront}=await import(require('node:url').pathToFileURL(path.join(process.env.STOREFRONT_PATH,'server.mjs')).href));await new Promise(r=>storefront.listen(0,'127.0.0.1',r));
-    const front='http://127.0.0.1:'+storefront.address().port,page=await browser.newPage({viewport:{width:393,height:852},reducedMotion:'reduce'}),errors=[];
-    page.on('pageerror',e=>errors.push(e.message));page.on('console',e=>{if(e.type()==='error')logs+='\nBROWSER '+e.text();});
+    const frontLocal='http://127.0.0.1:'+storefront.address().port,front='https://playground-agent-frontend-production.up.railway.app',page=await browser.newPage({viewport:{width:393,height:852},reducedMotion:'reduce'}),errors=[];
+    page.on('pageerror',e=>{errors.push(e.message);logs+='\nPAGEERROR '+e.stack;});page.on('console',e=>{if(e.type()==='error')logs+='\nBROWSER '+e.text();});
+    // All storefront traffic stays on the disposable local server, including
+    // return-button navigation to the centrally configured canonical origin.
+    await page.route(front+'/**',async route=>{const url=new URL(route.request().url()),headers={...route.request().headers()};if(headers.origin===front)headers.origin=frontLocal;try{const response=await route.fetch({url:frontLocal+url.pathname+url.search,headers});await route.fulfill({response});}catch{await route.abort().catch(()=>{});}});
     await page.route('https://chatvice.app/**',r=>r.fulfill({body:'',contentType:'application/javascript'}));
     await page.route(host+'/**',async route=>{const url=new URL(route.request().url()),headers={...route.request().headers()};if(headers.origin===host)headers.origin=origin;try{const response=await route.fetch({url:origin+url.pathname+url.search,headers});await route.fulfill({response});}catch{await route.abort().catch(()=>{});}});
     await page.goto(front+'/user');await page.locator('[data-action="auth"][data-mode="login"]').first().click();await page.locator('form[data-form="auth"] [name="username"]').fill('player_'+label);await page.locator('form[data-form="auth"] [name="password"]').fill(password);await page.locator('form[data-form="auth"] button[type="submit"]').click();await page.locator('form[data-form="profile"]').waitFor();
@@ -33,6 +36,9 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
     if(game.python){await page.waitForFunction(()=>window.MahjongStudioRuntime?.manifest);assert.equal(await page.locator('#reset-btn').isVisible(),false);const splash=page.locator('#soft-tech-continue');if(await splash.count())await splash.click({timeout:30000});}
     else{await page.waitForFunction(()=>window.SlotGameTest&&window.SkygateAgency);assert.equal(await page.locator('#reset').isVisible(),false);await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(x=>x.close());window.SkygateBoot?.dismiss?.();});const boot=page.locator('#bootPlay');if(await boot.isVisible())await boot.click();}
     assert.equal(new URL(page.url()).hash,'');
+    assert.equal(await page.locator('#agency-return').getAttribute('href'),front+'/');
+    assert.equal(await page.locator('#agency-session-notice').isVisible(),false);
+    fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});await page.screenshot({path:path.join(__dirname,'../test-results/'+game.slug+'-native-return.png')});
     // Actual user click executes the real renderer's native request.
     await page.locator(game.button).waitFor();const responsePromise=page.waitForResponse(r=>r.url().endsWith(game.spin)&&r.request().method()==='POST');await page.locator(game.button).click({timeout:30000});const response=await responsePromise;assert.equal(response.status(),200,await response.text());const result=await response.json(),payload=JSON.parse(response.request().postData());
     const payout=Number(game.python?result.win_virtual_credits:result.payout),stake=Number(game.python?result.stake_virtual_credits:result.cost),initialExpected=1000-stake+payout;let expected=initialExpected,expectedRounds=1;
@@ -52,14 +58,27 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
       }
       await page.waitForFunction(()=>!window.SlotGameTest.getState().busy);
     }
+    let leavingResult,releaseResponse,receivedResponse;
+    const responseHeld=new Promise(r=>receivedResponse=r),releaseHeld=new Promise(r=>releaseResponse=r);
+    await page.route(host+game.spin,async route=>{const headers={...route.request().headers(),origin};const response=await route.fetch({url:origin+game.spin,headers});assert.equal(response.status(),200);leavingResult=await response.json();receivedResponse();await releaseHeld;await route.fulfill({response}).catch(()=>{});});
+    await page.locator(game.button).click();await responseHeld;
+    expected=expected-Number(game.python?leavingResult.stake_virtual_credits:leavingResult.cost)+Number(game.python?leavingResult.win_virtual_credits:leavingResult.payout);expectedRounds++;
+    await page.locator('#agency-return').click();await page.waitForURL(front+'/');await page.locator('#main').waitFor();releaseResponse();await page.unroute(host+game.spin);
+    await page.goto(front+'/user');await page.locator('form[data-form="profile"]').waitFor();
+    const afterLeave=await page.evaluate(()=>fetch('/api/player/wallet').then(r=>r.json()));assert.equal(Number(afterLeave.balances.find(b=>b.code.endsWith(':available')).amount),expected);
+    // Expiry blocks a new spin but retains the canonical return path and history.
+    await pool.query("UPDATE agency_launches SET expires_at=now()-interval '1 second' WHERE tenant_id=$1 AND player_id=$2",[cor.id,p.id]);
+    await page.goto(host+game.route);await page.waitForFunction(()=>window.PlaygroundNavigation&&!window.PlaygroundNavigation.canStart());
+    await page.locator('#agency-session-notice').waitFor();assert.match(await page.locator('#agency-session-notice').innerText(),/Sesi game berakhir/);
+    assert.equal(await page.locator('#agency-return').getAttribute('href'),front+'/');
     const rounds=(await pool.query('SELECT * FROM agency_rounds WHERE tenant_id=$1 AND player_id=$2 AND game_id=$3',[cor.id,p.id,gid])).rows;assert.equal(rounds.length,expectedRounds);assert.ok(rounds.every(r=>r.state==='settled'));
     const journals=(await pool.query('SELECT count(*)::int n FROM agency_journals WHERE tenant_id=$1 AND business_id=$2',[cor.id,'round-close:'+rounds[0].id])).rows[0].n;assert.equal(journals,1);
     for(const round of rounds)assert.equal((await pool.query('SELECT count(*)::int n FROM agency_journals WHERE tenant_id=$1 AND business_id=$2',[cor.id,'round-close:'+round.id])).rows[0].n,1);
     assert.deepEqual((await ok('/api/admin/agency/tenants/'+cor.id+'/reconciliation')).mismatches,[]);assert.deepEqual(errors,[]);
-    await page.locator(game.button).waitFor();
     fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});await page.screenshot({path:path.join(__dirname,'../test-results/'+game.slug+'-native.png')});
+    await page.locator('#agency-return').click();await page.waitForURL(front+'/');await page.locator('#main').waitFor();
     await page.goto(front+'/user');await page.locator('form[data-form="profile"]').waitFor();const wallet=await page.evaluate(()=>fetch('/api/player/wallet').then(r=>r.json()));assert.equal(Number(wallet.balances.find(b=>b.code.endsWith(':available')).amount),expected);
-    return {environment:'isolated sandbox',storefrontLaunchAndReturn:true,browser:'Chromium 393x852',restart:true,settledRounds:expectedRounds,settlementJournalsPerRound:1,ledgerDifferences:0,productionContacted:false};
+    return {environment:'isolated sandbox',storefrontLaunchAndReturn:true,browser:'Chromium 393x852',restart:true,returnButton:true,unknownResponseThenLeave:true,expiredSessionGuidance:true,settledRounds:expectedRounds,settlementJournalsPerRound:1,ledgerDifferences:0,productionContacted:false};
    }catch(e){fs.writeFileSync('/tmp/'+game.slug+'-uat.log',logs);throw e;}
    finally{if(storefront)await new Promise(r=>storefront.close(r));if(browser)await browser.close();await stop();fs.rmSync(tmp,{recursive:true,force:true});}
   });

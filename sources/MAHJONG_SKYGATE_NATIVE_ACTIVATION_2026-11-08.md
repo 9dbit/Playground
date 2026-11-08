@@ -54,3 +54,13 @@ Smoke test deployed memakai satu akun sintetis zero-coin yang identitasnya tidak
 
 Tidak ada deposit, withdraw atau paid round dalam smoke test deployed; paid-round browser UAT dijalankan pada database terisolasi. Bukti deidentified: `sources/evidence/mahjong-skygate-deployed-2026-11-08.json`. Service Playground master produksi semula, main branches dan saldo existing tidak diubah. Commit dokumentasi sesudahnya tidak memerlukan deployment ulang kode.
 
+
+## Navigasi kembali dan sesi (8 November 2026)
+
+Tombol kembali berbentuk lingkaran putih dengan panah ungu tersedia pada kedua game native, beserta tautan pada menu dan pesan pemulihan. Tujuan diambil dari domain utama agen yang sudah diverifikasi; tanpa domain itu, 64COR memakai storefront resminya dan agen lain memakai route tenant di public origin Playground. Return URL dari payload player, referrer atau fragment tidak dipercaya.
+
+Redeem dan signed status pusat mengirim navigation dan expiry dua jam yang sebenarnya. Endpoint context native hanya memberi metadata dari cookie sesi, sehingga tautan kembali tetap tersedia jika pembacaan wallet pusat gagal. Sesi kedaluwarsa menampilkan petunjuk kembali dan membuka ulang game; spin baru tetap ditolak server. Ronde yang sudah diterima tetap diselesaikan, bukan dihapus atau direfund saat pemain keluar. Gangguan koneksi memberi pilihan mencoba lagi untuk memulihkan state.
+
+UAT mobile memakai tombol kembali asli sambil menahan respons spin yang sudah diproses server. Setelah kembali ke akun 64COR, saldo cocok, semua ronde settled, masing-masing satu settlement journal. Mahjong: dua ronde; Skygate: empat ronde termasuk Buy Spin dan Bonus Booster. UAT juga memaksa expiry pada database terisolasi dan memeriksa pesan serta tujuan kembali. Seluruh 40 skenario integrasi lulus; unit backend 62 lulus/5 skip, Mahjong 34 lulus, Skygate 118 lulus. Tidak ada transaksi bank atau paid spin pada layanan deployed.
+
+Bukti: `sources/evidence/mahjong-skygate-native-2026-11-08.json`. Ini melengkapi integrasi sandbox; tidak mengaktifkan ekonomi live atau publikasi Studio lintas-service.

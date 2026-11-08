@@ -48,3 +48,7 @@ Batas ini sengaja dicatat sebagai pekerjaan tersisa, bukan diganti dengan status
 ## Kelanjutan yang memerlukan input dan integrasi
 
 Playground menentukan provider merchant pembayaran dan credential sandbox; domain/email sender untuk aktivasi mail; spesifikasi KYC/SMS/OAuth bila digunakan. Untuk live native games, evaluasi return efektif setelah pembulatan, ekonomi/risk pool dan kapasitas storage dahulu; integrasi durable dan sandbox tiga game sudah memiliki bukti UAT. Tidak mengubah persentase payout atau memindahkan saldo lokal lama secara otomatis.
+
+## Kelanjutan navigasi native selesai
+
+Mahjong dan Skygate mempunyai tombol kembali ke storefront agen dari game/menu, petunjuk sesi kedaluwarsa, serta pemulihan saat koneksi terputus. UAT 40/40 lulus termasuk keluar sebelum respons spin diterima browser; ledger cocok dan settlement tepat sekali. Rincian dan batas sandbox ada pada `MAHJONG_SKYGATE_NATIVE_ACTIVATION_2026-11-08.md`.

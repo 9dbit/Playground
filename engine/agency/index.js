@@ -38,13 +38,14 @@ function createAgency({
   master,
   publicDir,
   production = false,
+  publicOrigin = "http://localhost:3000",
   gameKeys = [],
   simulationWorker = false,
   chatvice = {},
 }) {
   const auth = createAuth({ pool, master, production }),
     billing = createBilling({ pool }),
-    games = createGames({ pool, gameKeys, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
+    games = createGames({ pool, gameKeys, publicOrigin, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
   function payload(p) {
     const { approval_token, password, code, ...rest } = p || {};
     return rest;
