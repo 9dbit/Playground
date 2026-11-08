@@ -1,0 +1,81 @@
+'use strict';
+const assert=require('node:assert/strict'),crypto=require('node:crypto'),C=require('../engine/security-crypto');
+module.exports=async function({pool,req,ok,check,staff,player,topup,paid,A,B,PA,PB,creds,password,base,runtime}){
+ const root='/api/admin/agency/tenants/'+A.id;
+ const owner=await staff(A.id,'owner','activationOwner');
+ async function credentials(){await pool.query('UPDATE agency_staff SET mfa_last_step=-1 WHERE id=$1',[owner.id]);return {password,code:C.totp(creds.get('activationOwner').mfa,Math.floor(Date.now()/30000))};}
+ await check('ACT_CONFIG','Tenant settings enforce permissions, version checks and server-side maintenance',async()=>{
+  const start=await ok('/api/agency/activation','GET',undefined,'activationOwner');
+  assert.equal((await req('/api/agency/activation','PUT',{settings:{...start.settings,referral:true},expected_version:start.version},'financeA')).status,403);
+  const data={...start.settings,referral:true,leaderboard:true,brand_name:'Alpha Brand',maintenance:true};
+  const saved=await ok(root+'/activation','PUT',{settings:data,expected_version:start.version});assert.equal(saved.version,1);
+  assert.equal((await req(root+'/activation','PUT',{settings:data,expected_version:start.version})).status,409);
+  assert.equal((await req('/api/player/deposits','POST',{amount:'100',method:'qris',idempotency_key:crypto.randomUUID()},'playerA')).status,503);
+  assert.equal((await req('/api/player/auth/register','POST',{tenant:A.slug,username:'blocked_maintenance',password},null)).status,503);
+  assert.equal((await req('/api/player/wallet','GET',undefined,'playerA')).status,200);
+  await ok(root+'/activation','PUT',{settings:{...data,maintenance:false},expected_version:saved.version});
+  assert.equal((await ok('/api/agency/activation','GET',undefined,'ownerB')).settings.referral,false);
+  return {staleWrite:409,financeWrite:403,depositAndRegistrationDuringMaintenance:503,historyAvailable:true};
+ });
+ await check('ACT_BROADCAST','Inbox broadcast is tenant scoped, idempotent and escaped by consumers',async()=>{
+  const p={title:'QA <script>',body:'Private internal announcement',idempotency_key:crypto.randomUUID()};
+  const a=await ok('/api/agency/broadcasts','POST',p,'activationOwner');const b=await ok('/api/agency/broadcasts','POST',p,'activationOwner');assert.equal(a.id,b.id);
+  assert.equal((await req('/api/agency/broadcasts','POST',{...p,body:'changed'},'activationOwner')).status,409);
+  const inbox=await ok('/api/player/inbox','GET',undefined,'playerA');assert.equal(inbox.items.filter(x=>x.title===p.title).length,1);
+  assert.equal((await ok('/api/player/inbox','GET',undefined,'playerB')).items.length,0);
+  await ok('/api/player/inbox/'+inbox.items[0].id+'/read','POST',{},'playerB');assert.equal((await ok('/api/player/inbox','GET',undefined,'playerA')).items[0].read_at,null);
+  await ok('/api/player/inbox/'+inbox.items[0].id+'/read','POST',{},'playerA');assert.ok((await ok('/api/player/inbox','GET',undefined,'playerA')).items[0].read_at);
+  return {duplicateRecipients:false,otherTenantReadMutation:false,externalDelivery:false};
+ });
+ await check('ACT_REWARDS','Budgeted bonus claims post once, reject overspend and return unused stock without billing sales',async()=>{
+  await topup(A.id,2000);const before=await runtime.agency.overview(A.id);
+  const payload={title:'QA fixed bonus',terms:'One claim; no wagering',reward:'100',budget:'250',min_deposit:'0',eligibility:'all',starts_at:new Date(Date.now()-60000).toISOString(),ends_at:new Date(Date.now()+3600000).toISOString(),idempotency_key:crypto.randomUUID(),...await credentials()};
+  assert.equal((await req('/api/agency/campaigns','POST',payload,'marketingA')).status,403);
+  const c=await ok('/api/agency/campaigns','POST',payload,'activationOwner');assert.equal((await ok('/api/agency/campaigns','POST',payload,'activationOwner')).id,c.id);
+  const stock=(await runtime.agency.overview(A.id)).balances.find(b=>b.code==='stock:available').amount;assert.equal(BigInt(before.balances.find(b=>b.code==='stock:available').amount)-BigInt(stock),250n);
+  assert.equal((await req('/api/player/rewards/claim','POST',{campaign_id:c.id},'playerB')).status,404);
+  const pair=await Promise.all([ok('/api/player/rewards/claim','POST',{campaign_id:c.id},'playerA'),ok('/api/player/rewards/claim','POST',{campaign_id:c.id},'playerA')]);assert.equal(pair[0].claim.id,pair[1].claim.id);
+  await player(A,'rewardSecond');await player(A,'rewardThird');await ok('/api/player/rewards/claim','POST',{campaign_id:c.id},'rewardSecond');
+  assert.ok((await req('/api/player/rewards/claim','POST',{campaign_id:c.id},'rewardThird')).status>=400);
+  const totals=(await runtime.agency.overview(A.id)).totals;assert.deepEqual(totals,before.totals);
+  await ok('/api/agency/campaigns/'+c.id+'/close','POST',await credentials(),'activationOwner');
+  const after=await runtime.agency.overview(A.id);assert.equal(BigInt(before.balances.find(b=>b.code==='stock:available').amount)-BigInt(after.balances.find(b=>b.code==='stock:available').amount),200n);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM agency_reward_claims WHERE campaign_id=$1',[c.id])).rows[0].n,2);
+  return {concurrentDoubleClaim:'one posting',budget:'250',awarded:'200',returned:'50',salesInvoiceUnchanged:true};
+ });
+ await check('ACT_REFERRAL','Referral binds at signup only, hides identities, and leaderboard reads settled rounds',async()=>{
+  const ref=await ok('/api/player/referral','GET',undefined,'playerA');
+  const reg=await req('/api/player/auth/register','POST',{tenant:A.slug,username:'invited_player',password,referral_code:ref.code},null);assert.equal(reg.status,201,JSON.stringify(reg.data));
+  assert.equal((await ok('/api/player/referral','GET',undefined,'playerA')).invited,1);
+  const rejected=await req('/api/player/auth/register','POST',{tenant:B.slug,username:'wrong_referral',password,referral_code:ref.code},null);assert.equal(rejected.status,409);
+  const ranks=await ok('/api/player/leaderboard','GET',undefined,'playerA');assert.ok(ranks.items.length>0);assert.ok(ranks.items.every(x=>!x.player_id&&/^Player [a-f0-9]{8}$/.test(x.name)));assert.equal(ranks.metric,'net_player');
+  const activity=await ok('/api/player/activity','GET',undefined,'playerA');assert.ok(activity.items.some(x=>x.action==='reward.claimed'));assert.ok(activity.items.every(x=>!x.details&&!x.ip));
+  assert.equal((await req('/api/player/leaderboard','GET',undefined,'playerB')).status,409);
+  return {referralRecordedAtSignup:true,automaticCommission:false,leaderboard:'settled monthly UTC',piiExposed:false};
+ });
+ await check('ACT_RECOVERY','Password recovery requires step-up, hides account lookup, expires and revokes sessions without disabling MFA',async()=>{
+  const p=await player(A,'resetSubject');const request={tenant:A.slug,username:'player_resetsubject'};
+  const exists=await ok('/api/player/auth/recovery','POST',request,null);const missing=await ok('/api/player/auth/recovery','POST',{...request,username:'no_such_account'},null);assert.deepEqual(exists,missing);
+  const payload={kind:'player',subject_id:p.id,identity_verified:true,reason:'Synthetic verification',...await credentials()};
+  assert.equal((await req('/api/agency/recovery','POST',payload,'financeA')).status,403);
+  assert.equal((await req('/api/agency/recovery','POST',{...payload,password:'wrong'},'activationOwner')).status,401);
+  const issued=await ok('/api/agency/recovery','POST',payload,'activationOwner');const token=new URLSearchParams(issued.path.split('#')[1]).get('token');
+  const persisted=(await pool.query('SELECT token_hash FROM agency_recovery_tokens WHERE subject_id=$1 AND used_at IS NULL',[p.id])).rows[0];assert.equal(persisted.token_hash,C.sha(token));assert.notEqual(persisted.token_hash,token);
+  await pool.query("UPDATE agency_recovery_tokens SET expires_at=now()-interval '1 second' WHERE subject_id=$1",[p.id]);assert.equal((await req('/api/agency-recovery/complete','POST',{token,password:password+'reset'},null)).status,400);
+  const next=await ok('/api/agency/recovery','POST',{...payload,...await credentials()},'activationOwner');const valid=new URLSearchParams(next.path.split('#')[1]).get('token');
+  await ok('/api/agency-recovery/complete','POST',{token:valid,password:password+'reset'},null);
+  assert.equal((await req('/api/player/me','GET',undefined,'resetSubject')).status,401);
+  assert.equal((await req('/api/agency-recovery/complete','POST',{token:valid,password:password+'reset2'},null)).status,400);
+  assert.equal((await req('/api/player/auth/login','POST',{...request,password},null)).status,401);
+  assert.equal((await req('/api/player/auth/login','POST',{...request,password:password+'reset'},null)).status,200);
+  const target=await staff(A.id,'support','resetStaff');
+  const staffLink=await ok('/api/agency/recovery','POST',{...payload,kind:'staff',subject_id:target.id,...await credentials()},'activationOwner');
+  await ok('/api/agency-recovery/complete','POST',{token:new URLSearchParams(staffLink.path.split('#')[1]).get('token'),password:password+'staff'},null);
+  const persistedStaff=(await pool.query('SELECT mfa_enabled,auth_version FROM agency_staff WHERE id=$1',[target.id])).rows[0];assert.equal(persistedStaff.mfa_enabled,true);assert.equal(persistedStaff.auth_version,2);
+  assert.equal((await req('/api/agency/me','GET',undefined,'resetStaff')).status,401);
+  const self=await staff(A.id,'finance','passwordSelf');await ok('/api/agency/auth/password','POST',{password,new_password:password+'self',code:C.totp(creds.get('passwordSelf').mfa,Math.floor(Date.now()/30000))},'passwordSelf');assert.equal((await req('/api/agency/me','GET',undefined,'passwordSelf')).status,401);assert.ok(await C.passwordVerify(password+'self',(await pool.query('SELECT password_hash FROM agency_staff WHERE id=$1',[self.id])).rows[0].password_hash));
+  const summary=await ok('/api/admin/agency/summary');assert.ok(summary.items.find(x=>x.id===A.id));
+  assert.equal((await req('/api/admin/agency/summary','GET',undefined,'ownerA')).status,401);
+  return {tokenLifetime:'15 minutes',tokenStored:'sha256',singleUse:true,oldSessionRejected:true,mfaPreserved:true,accountEnumeration:false};
+ });
+};

@@ -4,7 +4,7 @@ const crypto = require("node:crypto"),
 const { RequestError, transaction } = require("../transaction");
 const C = require("../security-crypto");
 const roles = {
-  owner: [
+  owner: ["recovery", "broadcast", "rewards",
     "overview",
     "finance.read",
     "deposit.approve",
@@ -31,7 +31,7 @@ const roles = {
     "billing",
     "support",
   ],
-  supervisor: [
+  supervisor: ["recovery", "broadcast",
     "overview",
     "finance.read",
     "deposit.approve",
@@ -47,7 +47,7 @@ const roles = {
     "audit",
   ],
   support: ["overview", "players.read", "support"],
-  marketing: ["overview", "games.select", "website", "support"],
+  marketing: ["broadcast","overview", "games.select", "website", "support"],
   analyst: ["overview", "reports", "billing"],
 };
 const fail = (status, message, code) => {

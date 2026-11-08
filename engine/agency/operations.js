@@ -2,6 +2,9 @@
 const { wrap } = require("./auth");
 const { fail, periodBounds, period, audit } = require("./core");
 const guide = [
+  {title:"Brand dan kesiapan",body:"Atur logo, favicon, warna, referral, leaderboard dan maintenance pada Brand & kesiapan. Pemeliharaan menahan registrasi, deposit, bonus dan ronde baru; withdraw dan bantuan tetap tersedia."},
+  {title:"Bonus dan inbox",body:"Kampanye bonus memakai anggaran yang dicadangkan dari stok agen, satu klaim per pemain, tanpa wagering. Bonus bukan penjualan koin. Tutup kampanye untuk mengembalikan sisa anggaran. Pengumuman inbox hanya untuk pemain aktif agen sendiri."},
+  {title:"Pemulihan akun",body:"Pemilik akun mengajukan pemulihan dari login. Admin memverifikasi identitas di luar sistem, lalu memakai password dan authenticator untuk menerbitkan tautan 15 menit, sekali pakai. Semua sesi dicabut setelah reset; MFA tetap aktif. Email otomatis hanya untuk email pemain yang sudah diverifikasi dan provider yang dikonfigurasi."},
   {
     title: "Stok koin",
     body: "Ajukan alokasi ke Playground. Stok yang disetujui belum menjadi penjualan. Checkout mereservasi stok; pembayaran sah memindahkan koin ke wallet pemain.",

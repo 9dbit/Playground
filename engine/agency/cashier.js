@@ -179,6 +179,7 @@ async function queue(db, t, o, actor) {
 }
 function createCashier({
   pool,
+  checkMaintenance = async()=>{},
   verifyApproval = async () => fail(403, "Approval required"),
 }) {
   async function deposit(a, p) {
@@ -192,6 +193,7 @@ function createCashier({
       const old = await duplicate(db, t.id, "deposit", k, hash);
       if (old) return old;
       openTenant(t);
+      await checkMaintenance(db,t.id);
       const player = (
         await db.query(
           "SELECT status FROM agency_players WHERE tenant_id=$1 AND id=$2",

@@ -183,6 +183,7 @@
     const q = new URLSearchParams(location.search);
     $("#app").innerHTML =
       `<div class="login-card"><a class="brand" href="/agency">PLAYGROUND / AGEN</a><h1>Masuk workspace</h1><p class="muted">Akses operasional khusus agen Anda.</p><form id="login-form">${field("tenant", "Kode agen", q.get("tenant") || "")}${field("username", "Email / username lama")}${field("password", "Password", "", "password")}${field("code", "Kode authenticator (jika aktif)")}<p class="error"></p><button type="submit">Masuk</button></form><p class="muted" style="margin-top:20px">Admin Playground: <a href="/agents">buka panel induk</a></p></div>`;
+    const forgot=document.createElement("button");forgot.type="button";forgot.className="quiet";forgot.textContent="Lupa password?";$("#login-form").after(forgot);forgot.onclick=()=>form("Pemulihan akun agen",field("tenant","Kode agen",q.get("tenant")||"")+field("username","Email / username"),async p=>{const r=await request("/api/agency/auth/recovery","POST",p);setTimeout(()=>inspect("Permintaan pemulihan",{pesan:r.message}),0);},"Minta bantuan pemulihan");
     $("#login-form").onsubmit = async (e) => {
       e.preventDefault();
       const b = e.currentTarget.querySelector("button");
@@ -232,6 +233,11 @@
       );
   }
   const nav = [
+    ...(master?[["network", "Semua agen", "overview"]]:[]),
+    ["activation","Brand & kesiapan","overview"],
+    ["campaigns","Bonus kampanye","rewards"],
+    ["broadcasts","Pengumuman inbox","broadcast"],
+    ["recovery","Pemulihan akun","recovery"],
     ["help", "Panduan operasional", "overview"],
     ["overview", "Ringkasan", "overview"],
     ["players", "Player", "players.read"],
@@ -242,6 +248,7 @@
     ["team", "Staff & IP", "team"],
     ["policy", "Aturan withdraw", "policy"],
     ["reports", "Analitik", "reports"],
+    ["reconciliation", "Rekonsiliasi", "reports"],
     ["billing", "Invoice", "billing"],
     ["support", "Bantuan", "support"],
     ["audit", "Audit", "audit"],
@@ -342,6 +349,38 @@
     });
     return { ...p, approval_token: g.approval_token };
   }
+  function recovery(kind,subject){
+    form('Buat tautan pemulihan',`<p class="wide">Verifikasi identitas pemilik akun terlebih dahulu. Tautan berlaku 15 menit; MFA tetap aktif. Bagikan hanya melalui kanal yang telah diverifikasi.</p>`+field('reason','Bukti/catatan verifikasi identitas','','textarea')+field('identity_verified','Identitas sudah diverifikasi','false','select',[['false','Belum'],['true','Sudah']])+field('password','Password Anda','','password')+field('code','Kode authenticator Anda'),async p=>{
+      const r=await api('/recovery','POST',{...p,kind,subject_id:subject,identity_verified:p.identity_verified==='true'});
+      setTimeout(()=>{const d=$('#modal');d.innerHTML=`<header><h2>Tautan sekali pakai</h2><button id="close-dialog" class="quiet">Tutup</button></header><p>Berlaku sampai ${date(r.expires_at)}. Salin dan kirim secara pribadi setelah verifikasi.</p><textarea readonly aria-label="Tautan reset">${E(location.origin+r.path)}</textarea>`;$('#close-dialog').onclick=()=>d.close();d.showModal();},0);
+    },'Verifikasi dan buat tautan');
+  }
+  async function activationView(b){
+    const r=await api('/activation'),s=r.settings;
+    b.innerHTML=`<div class="card"><h2>Kesiapan layanan</h2><div class="readiness-grid">${Object.entries(r.providers).map(([k,v])=>`<section class="readiness-item"><h3>${E(({payment:'Payment gateway',email:'Email',sms:'SMS',kyc:'Verifikasi identitas',oauth:'Login sosial',chat:'Chat'})[k]||k)}</h3>${pill(({unconfigured:'Belum dikonfigurasi',configured:'Dikonfigurasi',supported:'Tersedia'})[v.status]||v.status)}<p>${E(k==='email'&&!master?(v.status==='configured'?'Antrean email aktif. Status penerimaan provider tersedia di Pemulihan akun.':'Hubungi Playground untuk mengaktifkan pengiriman email. Pemulihan melalui admin tetap tersedia.'):(v.reason||v.provider||'Akun/provider belum dikonfigurasi'))}</p></section>`).join('')}</div><h3>Game native</h3>${table(['Game','Readiness','Environment'],r.games.map(g=>[E(g.name),pill(g.readiness),E(g.environment)]))}</div><div class="card"><h2>Brand & fitur website</h2><p>Perubahan berlaku pada website agen. Maintenance menghentikan registrasi, deposit, klaim bonus dan ronde baru; akses penarikan, riwayat dan bantuan tetap tersedia.</p>${can('website')?'<form id="activation-form"><div class="fields">'+field('brand_name','Nama brand',s.brand_name)+field('accent','Warna brand',s.accent,'color')+field('logo_url','URL logo (media agen)',s.logo_url)+field('favicon_url','URL favicon (media agen)',s.favicon_url)+['maintenance','leaderboard','referral'].map(k=>field(k,{maintenance:'Maintenance website',leaderboard:'Leaderboard net pemain bulanan (tanpa hadiah)',referral:'Referral undangan (tanpa komisi otomatis)'}[k],String(s[k]),'select',[['false','Nonaktif'],['true','Aktif']])).join('')+field('maintenance_message','Pesan maintenance',s.maintenance_message,'textarea')+'</div><p class="muted">Upload logo/favicon dari tombol di bawah. Semua fitur promosi tetap mengikuti anggaran dan syarat kampanye.</p><p class="activation-error" role="alert"></p><button type="submit">Terapkan pengaturan</button></form><div class="toolbar"><button id="upload-logo" class="secondary">Upload logo</button><button id="upload-favicon" class="secondary">Upload favicon</button><input id="brand-file" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>':'<p>Pengaturan website hanya dapat diubah oleh role yang memiliki izin Website.</p>'}</div>${!master?'<div class="card"><h2>Keamanan akun saya</h2><button id="change-password">Ubah password</button></div>':''}`;
+    if(can('website')){
+      $('#activation-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('[type=submit]');button.disabled=true;try{const p=Object.fromEntries(new FormData(form));for(const k of ['maintenance','leaderboard','referral'])p[k]=p[k]==='true';await api('/activation','PUT',{settings:p,expected_version:r.version});toast('Pengaturan diterapkan');await render();}catch(e){form.querySelector('.activation-error').textContent=e.message;}finally{button.disabled=false;}};
+      let target='logo_url';for(const k of ['logo','favicon'])$('#upload-'+k).onclick=()=>{target=k+'_url';$('#brand-file').click();};
+      $('#brand-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>500000)throw Error('Logo/favicon maksimal 500 KB');const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(f);});const asset=await api('/banner-upload','POST',{image});$('[name="'+target+'"]').value=asset.url;toast('Aset siap. Klik Terapkan pengaturan.');}catch(e){toast(e.message);}finally{$('#brand-file').value='';}};
+    }
+    $('#change-password')?.addEventListener('click',()=>form('Ubah password',field('password','Password saat ini','','password')+field('new_password','Password baru (15–128 karakter)','','password')+field('code','Kode authenticator'),async p=>{await api('/auth/password','POST',p);location.reload();}));
+  }
+  async function broadcastsView(b){
+    const r=await api('/broadcasts');b.innerHTML=`<div class="toolbar">${button('broadcast','','Pengumuman baru')}</div><div class="card"><p>Pengumuman masuk ke inbox pemain aktif pada agen ini. Tidak mengirim email, SMS, atau Chatvice.</p>${table(['Judul','Pesan','Penerima','Dibuat'],r.items.map(x=>[E(x.title),E(x.body),num(x.recipients),date(x.created_at)]))}</div>`;
+    b.querySelector('[data-action=broadcast]').onclick=()=>form('Pengumuman untuk pemain aktif',field('title','Judul')+field('body','Pesan','','textarea'),(p,key)=>api('/broadcasts','POST',{...p,idempotency_key:key}),'Terbitkan ke inbox');
+  }
+  async function campaignsView(b){
+    const r=await api('/campaigns');b.innerHTML=`<div class="toolbar">${button('campaign','','Kampanye bonus baru')}</div><div class="card"><p>Bonus tetap, satu klaim per pemain, tanpa syarat wagering. Anggaran langsung dicadangkan dari stok agen; bonus tidak dicatat sebagai penjualan koin/invoice. Kampanye ditutup untuk mengembalikan anggaran tersisa.</p>${table(['Kampanye','Bonus / minimum deposit','Sisa anggaran','Periode','Status',''],r.items.map(x=>[E(x.title)+'<br><small>'+E(x.terms)+'</small>',num(x.reward)+' / '+num(x.min_deposit),num(x.remaining),date(x.starts_at)+' – '+date(x.ends_at),pill(x.state),x.state==='active'?button('close-campaign',x.id,'Tutup & kembalikan sisa'):'']))}</div>`;
+    b.querySelector('[data-action=campaign]').onclick=()=>form('Kampanye bonus dari stok agen',field('title','Nama kampanye')+field('terms','Syarat yang ditampilkan kepada pemain','','textarea')+field('reward','Bonus per pemain (koin)','100')+field('budget','Total anggaran (koin)','1000')+field('min_deposit','Minimum total deposit credited','0')+field('eligibility','Pemain yang berhak','all','select',[['all','Semua pemain aktif'],['referred','Pemain yang mendaftar dengan kode referral']])+field('starts_at','Mulai (waktu lokal)',new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16),'datetime-local')+field('ends_at','Berakhir (waktu lokal)','','datetime-local')+field('password','Password Anda','','password')+field('code','Kode authenticator'),(p,key)=>api('/campaigns','POST',{...p,starts_at:new Date(p.starts_at).toISOString(),ends_at:new Date(p.ends_at).toISOString(),idempotency_key:key}),'Cadangkan koin & aktifkan');
+    b.querySelectorAll('[data-action=close-campaign]').forEach(el=>el.onclick=()=>form('Tutup kampanye',field('password','Password Anda','','password')+field('code','Kode authenticator'),p=>api('/campaigns/'+el.dataset.id+'/close','POST',p)));
+  }
+  async function recoveryView(b){
+    const r=await api('/recovery-requests'),delivery=await api('/email-delivery');b.innerHTML=`<div class="card"><p>Permintaan ini belum membuktikan identitas pemohon. Admin harus memverifikasi pemilik akun sebelum membuat tautan reset.</p>${table(['Akun','Jenis','Diajukan','Status',''],r.items.map(x=>[E(x.username),E(x.kind),date(x.created_at),x.resolved_at?'Selesai':'Perlu verifikasi',!x.resolved_at&&(x.kind==='player'||can('team'))?button('recover',x.subject_id,'Verifikasi & reset',`data-kind="${E(x.kind)}"`):'']))}</div>`;b.innerHTML+=`<div class="card"><h2>Pengiriman email</h2><p>${E(delivery.provider.reason)}</p>${table(['Jenis','Status','Percobaan','Catatan','Waktu'],delivery.items.map(x=>[E(x.purpose),pill(x.state),num(x.attempts),E(x.last_error||''),date(x.updated_at)]))}</div>`;b.querySelectorAll('[data-action=recover]').forEach(el=>el.onclick=()=>recovery(el.dataset.kind,el.dataset.id));
+  }
+  async function networkView(b){
+    const r=await request('/api/admin/agency/summary');b.innerHTML=`<div class="card"><p>${E(r.notice)} Nilai tidak dijumlahkan lintas currency/coin scale.</p>${table(['Agen','Environment','Player','Penjualan / withdraw','Stok tersedia','Pengecualian',''],r.items.map(t=>[E(t.name),E(t.environment),num(t.counts.players),num(t.totals.sales)+' / '+num(t.totals.withdrawals),num(t.balances.find(x=>x.code==='stock:available')?.amount),num(t.exceptions.length),`<a href="/agents?tenant_id=${E(t.id)}#overview">Kelola agen</a>`]))}</div>`;
+  }
+
   async function render() {
     if (!$("#body")) return;
     if (master && !tenant) {
@@ -357,6 +396,14 @@
     const b = $("#body");
     b.innerHTML = '<p class="loading">Memuat…</p>';
     try {
+      if(view === "reconciliation" && can("reports")){
+        const r=await api('/reconciliation');b.innerHTML=`<div class="card"><h2>Rekonsiliasi internal</h2><p>${E(r.notice)}</p><p>${r.mismatches.length?'Ada selisih ledger yang perlu diperiksa.':'Saldo tercatat cocok dengan jumlah journal.'} · ${date(r.as_of)}</p>${table(['Akun','Unit','Tercatat','Journal'],r.mismatches.map(x=>[E(x.code),E(x.unit),num(x.recorded),num(x.expected)]))}<h3>Ronde belum selesai</h3>${table(['Game','Round ID sumber','Session ID','Stake','Mulai'],r.pending.map(x=>[E(x.game),E(x.round_ref),E(x.session_id),num(x.stake),date(x.created_at)]))}<h3>Pembayaran perlu tindak lanjut</h3>${table(['ID','Jenis','Status','Nominal'],r.payments.map(x=>[E(x.id),E(x.kind),pill(x.state),num(x.amount)]))}</div>`;return;
+      }
+      if(view === "activation") return await activationView(b);
+      if(view === "campaigns" && can("rewards")) return await campaignsView(b);
+      if(view === "broadcasts" && can("broadcast")) return await broadcastsView(b);
+      if(view === "recovery" && can("recovery")) return await recoveryView(b);
+      if(view === "network" && master) return await networkView(b);
       if (view === "overview") {
         const r = await api("/overview");
         const n = (code) =>
@@ -428,10 +475,11 @@
               pill(x.status),
               ...(r.reports?[num(x.results.stake),num(x.results.payout),num(x.results.net)]:[]),
               date(x.created_at),
-              button("player", x.id, "Detail"),
+              button("player", x.id, "Detail")+(can("recovery")?button("recover-player",x.id,"Reset password"):""),
             ]),
           ) +
           "</div>";
+        b.querySelectorAll('[data-action="recover-player"]').forEach(el=>el.onclick=()=>recovery("player",el.dataset.id));
         b.querySelectorAll('[data-action="player"]').forEach(
           (el) =>
             (el.onclick = async () =>
@@ -682,10 +730,11 @@
               pill(x.status),
               x.mfa_enabled ? "Aktif" : "Belum aktif",
               E(x.ip_allowlist.join(", ") || "Tidak dibatasi"),
-              button("staff", x.id, "Edit"),
+              button("staff", x.id, "Edit")+button("recover-staff",x.id,"Reset password"),
             ]),
           ) +
           "</div>";
+        b.querySelectorAll('[data-action="recover-staff"]').forEach(el=>el.onclick=()=>recovery("staff",el.dataset.id));
         const opts = [
           "owner",
           "finance",

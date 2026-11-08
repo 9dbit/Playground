@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS agency_launches (
  token_hash text UNIQUE NOT NULL, expires_at timestamptz NOT NULL, redeemed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(tenant_id,id), FOREIGN KEY(tenant_id,player_id) REFERENCES agency_players(tenant_id,id)
 );
+ALTER TABLE agency_launches ADD COLUMN IF NOT EXISTS redeem_request text;
 CREATE TABLE IF NOT EXISTS agency_rounds (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, player_id uuid NOT NULL, game_id uuid NOT NULL REFERENCES gameops_games(id),
  launch_id uuid NOT NULL, round_ref text NOT NULL, stake numeric(38,0) NOT NULL CHECK(stake>0), payout numeric(38,0),

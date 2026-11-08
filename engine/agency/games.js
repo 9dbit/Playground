@@ -12,9 +12,10 @@ const {
   post,
   move,
   audit,
+  balance,
 } = require("./core");
 const { playerCode } = require("./cashier");
-function createGames({ pool, gameKeys = [] }) {
+function createGames({ pool, gameKeys = [], checkMaintenance = async()=>{} }) {
   const keys = new Map();
   for (const k of gameKeys) {
     if (
@@ -39,6 +40,7 @@ function createGames({ pool, gameKeys = [] }) {
     ).rows;
   }
   async function entitled(db, t, g) {
+    await checkMaintenance(db,t.id);
     const game = (await catalog(db, t.id)).find((x) => x.id === g);
     if (
       !game ||
@@ -96,13 +98,16 @@ function createGames({ pool, gameKeys = [] }) {
           [t.id, l.id],
         )
       ).rows[0];
-      if (fresh.redeemed_at || new Date(fresh.expires_at) <= new Date())
+      const request = p.request_id === undefined ? null : text(p.request_id,120);
+      if (new Date(fresh.expires_at) <= new Date() || (fresh.redeemed_at && (!request || fresh.redeem_request !== C.sha(request))))
         fail(409, "Launch token sudah digunakan atau kedaluwarsa");
+      if(!fresh.redeemed_at){
       await entitled(db, t, l.game_id);
       await db.query(
-        "UPDATE agency_launches SET redeemed_at=now(),expires_at=now()+interval '2 hours' WHERE tenant_id=$1 AND id=$2",
-        [t.id, l.id],
+        "UPDATE agency_launches SET redeemed_at=now(),expires_at=now()+interval '2 hours',redeem_request=$3 WHERE tenant_id=$1 AND id=$2",
+        [t.id, l.id, request ? C.sha(request) : null],
       );
+      }
       return {
         session_id: l.id,
         tenant_id: t.id,
@@ -110,6 +115,7 @@ function createGames({ pool, gameKeys = [] }) {
         game: scope.game,
         currency: t.currency,
         coin_scale: t.coin_scale,
+        balance: String(await balance(db,t.id,playerCode(l.player_id))),
       };
     });
   }
@@ -265,6 +271,13 @@ function createGames({ pool, gameKeys = [] }) {
       ).rows[0];
     });
   }
+  async function status(p,scope){
+    return locked(pool,id(p.tenant_id),async(db,t)=>{
+      const l=await session(db,t,p.session_id,scope,false);
+      const rounds=(await db.query("SELECT id,round_ref,stake::text,payout::text,state,created_at,settled_at FROM agency_rounds WHERE tenant_id=$1 AND launch_id=$2 AND ($3::text IS NULL OR round_ref=$3) ORDER BY created_at DESC LIMIT 100",[t.id,l.id,p.round_ref===undefined?null:text(p.round_ref,120)])).rows;
+      return {session_id:l.id,tenant_id:t.id,player_id:l.player_id,currency:t.currency,coin_scale:t.coin_scale,expires_at:l.expires_at,balance:String(await balance(db,t.id,playerCode(l.player_id))),reserved:String(await balance(db,t.id,playerCode(l.player_id,'reserved'))),rounds};
+    });
+  }
   async function verify(req) {
     const k = keys.get(req.get("X-Agency-Key"));
     const ts = req.get("X-Agency-Timestamp"),
@@ -307,6 +320,7 @@ function createGames({ pool, gameKeys = [] }) {
     reserve,
     settle,
     verify,
+    status,
     configured: [...keys.values()].map((k) => ({
       id: k.id,
       game: k.game,

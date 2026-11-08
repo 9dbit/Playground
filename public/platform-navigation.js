@@ -13,7 +13,7 @@ const MASTER_MENUS = [
     [
       [
         "Platform Agen",
-        "/agents"
+        "/agents#network"
       ]
     ]
   ],
@@ -334,11 +334,13 @@ const MASTER_MENUS = [
     const groups=ownAgent?[]:MASTER_MENUS;
     if(agencyPage)groups.unshift(['Agen terpilih',Array.from(document.querySelectorAll('.sidebar [data-view]')).map(a=>[a.textContent,location.pathname+location.search+a.getAttribute('href')])]);
     const grid=document.createElement('div');grid.className='pg-menu-grid';
+    const deferred=href=>/\/players\/(email|mobile|kyc|kyc-pending)$|\/subscribers$|\/extra\/(cache|update)$|\/content\/(template|frontend)$|\/setting\/(configuration|notification|kyc|social|language|extensions|gdpr|css)$/.test(href);
+    const technical=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Rancangan teknis / belum aktif';technical.append(summary);
     for(const [name,items] of groups){const section=document.createElement('section');const h=document.createElement('h3');h.textContent=name;section.append(h);
-      for(const [label,href] of items){const a=document.createElement('a');a.href=href;a.textContent=label;a.onclick=()=>dialog.close();section.append(a);}grid.append(section);}
+      for(const [label,href] of items){const a=document.createElement('a');a.href=href;a.textContent=label;a.onclick=()=>dialog.close();if(deferred(href)){technical.append(a);}else section.append(a);}grid.append(section);}
     if(!ownAgent && agencyPage)groups.shift();
     if(ownAgent && document.getElementById('logout')){const out=button('Keluar');out.onclick=()=>{dialog.close();document.getElementById('logout').click();};grid.append(out);}
-    dialog.append(grid);dialog.showModal();
+    dialog.append(grid);if(technical.children.length>1)dialog.append(technical);dialog.showModal();
   }
   function attach(){
     if(ownAgent&&!document.querySelector('.sidebar [data-view]'))return;

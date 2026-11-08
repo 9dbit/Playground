@@ -44,7 +44,7 @@ function createAgency({
 }) {
   const auth = createAuth({ pool, master, production }),
     billing = createBilling({ pool }),
-    games = createGames({ pool, gameKeys });
+    games = createGames({ pool, gameKeys, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
   function payload(p) {
     const { approval_token, password, code, ...rest } = p || {};
     return rest;
@@ -85,7 +85,7 @@ function createAgency({
       action,
     });
   }
-  const cashier = createCashier({ pool, verifyApproval });
+  const cashier = createCashier({ pool, verifyApproval, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
   const actor = (req) =>
     req.agency || {
       id: req.auth.id,
@@ -286,6 +286,7 @@ function createAgency({
               [t.id, user, hash, text(p.display_name || user, 100)],
             )
           ).rows[0];
+          await auth.onRegistered?.(db,t,a,p);
           await audit(db, t.id, a.id, "player.registered", a.id);
           return auth.grant(db, req, res, "player", a, t);
         });
@@ -1252,6 +1253,7 @@ function createAgency({
     );
     for (const [action, fn] of [
       ["redeem", games.redeem],
+      ["status", games.status],
       ["reserve", games.reserve],
       ["settle", games.settle],
       ["void", (p, s) => games.settle(p, s, true)],

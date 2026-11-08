@@ -44,14 +44,24 @@ function mount({app,pool,agency}) {
     if(!t || !t.website.published || !['sandbox','active'].includes(t.status))fail(404,'Website belum tersedia');
     const pages=(await pool.query('SELECT slug,published,version FROM agency_content WHERE tenant_id=$1 AND published IS NOT NULL ORDER BY slug',[t.id])).rows.map(c=>({slug:c.slug,...c.published}));
     const games=(await pool.query(`SELECT g.id,g.slug,g.name,g.status,r.readiness FROM agency_games a JOIN gameops_games g ON g.id=a.game_id LEFT JOIN agency_game_releases r ON r.game_id=g.id WHERE a.tenant_id=$1 AND a.selected AND a.entitled ORDER BY a.position,g.name`,[t.id])).rows;
-    res.set('Cache-Control','no-store').json({tenant:{id:t.id,slug:t.slug,name:t.name,environment:t.environment,currency:t.currency},pages,games,capabilities:{gateway:'simulation',bonus:false,referral:false,leaderboard:false},admin_url:'/agency?tenant='+t.slug});
+    res.set('Cache-Control','no-store').json({tenant:{id:t.id,slug:t.slug,name:t.name,environment:t.environment,currency:t.currency},pages,games,capabilities:await agency.activation.capabilities(pool,t.id),settings:(await agency.activation.configuration(pool,t.id)).settings,admin_url:'/agency?tenant='+t.slug});
   }));
   app.put('/api/player/profile',wrap(async(req,res)=>{
     const a=req.agency,p=req.body;
-    const name=text(p.name,100),email=String(p.email||'').trim();
+    const name=text(p.name,100),email=String(p.email||'').trim().toLowerCase();
     if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length>200)fail(400,'Email tidak valid');
-    await pool.query("UPDATE agency_players SET display_name=$3,profile=profile||$4::jsonb WHERE tenant_id=$1 AND id=$2",[a.tenant_id,a.id,name,asJson({email})]);
-    await audit(pool,a.tenant_id,a.id,'player.profile_updated',a.id);
+    await agency.core.locked(pool,a.tenant_id,async db=>{
+      const fresh=(await db.query('SELECT profile,auth_version FROM agency_players WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[a.tenant_id,a.id])).rows[0];
+      if(!fresh||fresh.auth_version!==a.auth_version)fail(401,'Sesi sudah berubah, masuk kembali');
+      const changed=(fresh.profile.email||'')!==email;
+      await db.query('UPDATE agency_players SET display_name=$3,profile=profile||$4::jsonb WHERE tenant_id=$1 AND id=$2',[a.tenant_id,a.id,name,asJson({email,...(changed?{email_verified:false,verified_email:null,email_verified_at:null}:{})})]);
+      if(changed){
+        await db.query('UPDATE agency_email_tokens SET used_at=now() WHERE tenant_id=$1 AND player_id=$2 AND used_at IS NULL',[a.tenant_id,a.id]);
+        await db.query('UPDATE agency_recovery_tokens SET used_at=now() WHERE tenant_id=$1 AND subject_id=$2 AND used_at IS NULL',[a.tenant_id,a.id]);
+        await db.query("UPDATE agency_email_outbox SET state='expired',payload=NULL WHERE tenant_id=$1 AND player_id=$2 AND state IN ('queued','sending')",[a.tenant_id,a.id]);
+      }
+      await audit(db,a.tenant_id,a.id,'player.profile_updated',a.id);
+    });
     res.json({ok:true});
   }));
   app.put('/api/player/preferences',wrap(async(req,res)=>{

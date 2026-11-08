@@ -1463,6 +1463,9 @@ async function main() {
     assert.equal((await req('/api/player/auth/login','POST',{tenant:'64cor',username:'player_corapi',password:password+'new'},null)).status,200);
     return {tenant:t.id,pages:site.pages.length,games:site.games.length};
   });
+  await require("./agency-activation.cjs")({pool,req,ok,check,staff,player,topup,paid,A,B,PA,PB,creds,password,base,runtime});
+  await require("./agency-adapter.cjs")({pool,runtime,check,player,A,B,topup,paid,ok,base,gameSecret});
+  await require("./agency-email.cjs")({pool,runtime,check,player,A,password,req});
   if (process.env.AGENCY_BROWSER === "true")
     await check(
       "BROWSER",
@@ -1702,6 +1705,35 @@ async function main() {
               await cor.locator('form[data-form="support"] button').click();
               await cor.getByRole('dialog',{name:'Tiket terkirim'}).waitFor();
               assert.ok((await pool.query('SELECT id FROM agency_tickets WHERE tenant_id=$1',[tenant.id])).rowCount===1);
+              // Exercise new capabilities through both real UIs, beyond route rendering.
+              const ownerCor=await staff(tenant.id,'owner','corOwnerQA');
+              const agentCtx=await browser.newContext();await agentCtx.route('https://chatvice.app/**',r=>r.fulfill({contentType:'application/javascript',body:''}));
+              const [staffCookie,staffValue]=creds.get('corOwnerQA').cookie.split('=');await agentCtx.addCookies([{name:staffCookie,value:staffValue,url:base,httpOnly:true,sameSite:'Strict'}]);
+              const ops=await agentCtx.newPage();ops.on('pageerror',e=>errors.push(e.message));
+              try{
+                await ops.goto(base+'/agency#activation');await ops.locator('[name=brand_name]').fill('64COR Connected QA');await ops.locator('[name=referral]').selectOption('true');await ops.locator('[name=leaderboard]').selectOption('true');await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();
+                await cor.goto(corBase+'/');await cor.locator('.header .logo').filter({hasText:'64COR Connected QA'}).waitFor();
+                const brand=await require('sharp')({create:{width:240,height:80,channels:3,background:'#7722aa'}}).png().toBuffer();await ops.locator('#brand-file').setInputFiles({name:'brand.png',mimeType:'image/png',buffer:brand});await ops.waitForFunction(()=>document.querySelector('[name=logo_url]').value.includes('/media/agency/'));await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();await cor.reload();await cor.waitForFunction(()=>{const logo=document.querySelector('.header .agency-brand-logo');return logo?.complete&&logo.naturalWidth===240;});
+                const map=await fetch(corBase+'/sitemap.xml');assert.equal(map.status,200);assert.doesNotMatch(await map.text(),/<url>/);const robots=await fetch(corBase+'/robots.txt');assert.match(await robots.text(),/Disallow: \/\n/);
+                await topup(tenant.id,300);
+                await ops.goto(base+'/agency#campaigns');await ops.getByRole('button',{name:'Kampanye bonus baru',exact:true}).click();await ops.locator('#modal [name=title]').fill('Connected QA bonus');await ops.locator('#modal [name=terms]').fill('One claim. No wagering.');await ops.locator('#modal [name=reward]').fill('50');await ops.locator('#modal [name=budget]').fill('100');await ops.locator('#modal [name=ends_at]').fill(new Date(Date.now()+86400000).toISOString().slice(0,16));await ops.locator('#modal [name=password]').fill(password);await ops.locator('#modal [name=code]').fill(C.totp(creds.get('corOwnerQA').mfa,Math.floor(Date.now()/30000)));await ops.getByRole('button',{name:'Cadangkan koin & aktifkan',exact:true}).click();await ops.locator('#modal').waitFor({state:'hidden'});await ops.locator('tbody tr').filter({hasText:'Connected QA bonus'}).waitFor();
+                await cor.goto(corBase+'/user/bonuses');await cor.getByRole('button',{name:'Klaim bonus',exact:true}).click();await cor.getByRole('button',{name:'Sudah diklaim',exact:true}).waitFor();
+                const claim=(await pool.query('SELECT * FROM agency_reward_claims WHERE tenant_id=$1',[tenant.id])).rows[0];assert.equal(claim.amount,'50');
+                await cor.reload();await cor.getByRole('button',{name:'Sudah diklaim',exact:true}).waitFor();assert.equal((await pool.query('SELECT count(*)::int AS n FROM agency_reward_claims WHERE tenant_id=$1',[tenant.id])).rows[0].n,1);
+                await ops.goto(base+'/agency#broadcasts');await ops.getByRole('button',{name:'Pengumuman baru',exact:true}).click();await ops.locator('#modal [name=title]').fill('Connected QA announcement');await ops.locator('#modal [name=body]').fill('Hello <script>safe text</script>');await ops.getByRole('button',{name:'Terbitkan ke inbox',exact:true}).click();await ops.locator('#modal').waitFor({state:'hidden'});
+                await cor.goto(corBase+'/user/messages');await cor.getByRole('button').filter({has:cor.getByRole('heading',{name:'Connected QA announcement',exact:true})}).click();await cor.getByRole('dialog',{name:'Connected QA announcement',exact:true}).waitFor();assert.equal(await cor.locator('[role=dialog] script').count(),0);assert.ok((await cor.locator('[role=dialog]').innerText()).includes('Hello <script>safe text</script>'));
+                await cor.goto(corBase+'/user/activity');await cor.getByText('Bonus diklaim',{exact:true}).waitFor();await cor.goto(corBase+'/user/referral/history');await cor.getByRole('textbox',{name:'Tautan referral',exact:true}).waitFor();
+                await ops.goto(base+'/agency#activation');await ops.locator('[name=maintenance]').selectOption('true');await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();
+                await cor.goto(corBase+'/');await cor.locator('#main [role=status]').filter({hasText:'pemeliharaan'}).waitFor();
+                await ops.locator('[name=maintenance]').selectOption('false');await ops.getByRole('button',{name:'Terapkan pengaturan',exact:true}).click();await ops.getByText('Pengaturan diterapkan',{exact:true}).waitFor();
+                await ops.setViewportSize({width:390,height:844});await ops.screenshot({path:path.join(__dirname,'../test-results/agency-activation-mobile.png'),fullPage:true});
+                await cor.goto(corBase+'/user/bonuses');await cor.screenshot({path:path.join(__dirname,'../test-results/64cor-bonus-mobile.png'),fullPage:true});
+                await pool.query('UPDATE agency_staff SET mfa_last_step=-1 WHERE id=$1',[ownerCor.id]);
+                const recovery=await ok('/api/agency/recovery','POST',{kind:'player',subject_id:claim.player_id,identity_verified:true,reason:'QA browser verified',password,code:C.totp(creds.get('corOwnerQA').mfa,Math.floor(Date.now()/30000))},'corOwnerQA');
+                const reset=await browser.newPage();await reset.goto(base+recovery.path);await reset.locator('[name=password]').fill(password+'new-browser');await reset.locator('[name=confirm]').fill(password+'new-browser');await reset.getByRole('button',{name:'Simpan password',exact:true}).click();await reset.getByText(/Password diperbarui. Semua sesi lama dicabut/).waitFor();assert.equal(new URL(reset.url()).hash,'');await reset.close();
+                const liveSession=await cor.evaluate(()=>fetch('/api/player/me').then(r=>r.status));assert.equal(liveSession,401);
+              }finally{await agentCtx.close();}
+
             } finally {await cor.close();await new Promise(r=>storefront.close(r));}
           }
           assert.deepEqual(errors, []);

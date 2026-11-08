@@ -43,6 +43,9 @@ const chatvice={origin:process.env.AGENCY_CHATVICE_ORIGIN||'',masterMerchant:pro
 if(chatvice.origin){if(new URL(chatvice.origin).origin!=='https://chatvice.app')throw new Error('Only the official Chatvice origin is supported');chatvice.origin=new URL(chatvice.origin).origin;}
 const agency=createAgency({pool,security,master:SESSION_SECRET,publicDir:path.join(__dirname,'public'),production:PRODUCTION,
  gameKeys:JSON.parse(process.env.AGENCY_GAME_KEYS||'[]'),simulationWorker:process.env.AGENCY_SIMULATION_WORKER==='true',chatvice});
+const activation=require('./engine/agency/activation').createActivation({pool,agency,security,publicDir:path.join(__dirname,'public')});
+const agencyEmail=require('./engine/agency/email').createEmail({pool,agency,origin:publicOrigin});agency.email=agencyEmail;
+agency.activation=activation;agency.auth.onRegistered=activation.registered;agency.auth.maintenance=activation.maintenance;
 const agencyContent=createAgencyContent({pool,agency,publicOrigin,chatvice});
 const iso = () => new Date().toISOString();
 const valid = (s, max = 120) => typeof s === 'string' && s.length > 0 && s.length <= max;
@@ -121,7 +124,7 @@ async function initDB() {
     await pool.query('INSERT INTO gameops_games(name,slug,code) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING', [name, slug, code]);
   }
   await bridge.init(); await wallet.init();
-  await agency.init();
+  await agency.init(); await activation.init(); await agencyEmail.init();
   const conflicts=await publicContent.inspectConflicts(pool);
   console.log('[cms-public-url] canonical namespaces active; ambiguous legacy slugs:',conflicts);
 }
@@ -254,7 +257,11 @@ virtualWallet.mount(app,{pool,currentActor:security.currentActor});
 parity.mount(app,{pool});
 adminOps.mount(app,{pool});
 publicContent.mount(app,{pool});
+agencyEmail.mountPublic(app);
+activation.mountPublic(app);
 agency.mount(app);
+activation.mount(app);
+agencyEmail.mount(app);
 agencyContent.mount(app);
 require("./engine/agency/storefront").mount({ app, pool, agency });
 mountOperations(app,{pool,agency,chatvice});
@@ -272,10 +279,10 @@ if(require.main===module)initDB().then(async()=>{
  if (process.env.DATABASE_SCHEMA === "agency_sandbox_v1") await require("./engine/agency/storefront").ensure64cor(pool);
  const server=app.listen(PORT,'0.0.0.0',()=>console.log('Playground GameOps '+VERSION+' listening on '+PORT+' at '+iso()));
  const stopScheduler=adminOps.startScheduler(pool,{onError:e=>console.error('[maintenance-job]',e.code||e.message)});
- const stopAgency=agency.startWorker();
+ const stopAgency=agency.startWorker(); const stopEmail=agencyEmail.start();
  let publishing=false;
  const publisher=setInterval(async()=>{if(publishing)return;publishing=true;try{await agencyContent.tick()}catch(e){console.error('[agency-publisher]',e.code||e.message)}finally{publishing=false}},30000);publisher.unref();
- const stop=()=>{stopScheduler();stopAgency();clearInterval(publisher);server.close(()=>pool.end().then(()=>process.exit(0)));setTimeout(()=>process.exit(1),10000).unref();};
+ const stop=()=>{stopScheduler();stopAgency(); stopEmail();clearInterval(publisher);server.close(()=>pool.end().then(()=>process.exit(0)));setTimeout(()=>process.exit(1),10000).unref();};
  process.once('SIGTERM',stop);process.once('SIGINT',stop);
 }).catch(e=>{console.error('Database startup failed:',e.code||e.message);process.exit(1);});
 module.exports={app,pool,initDB,agency,agencyContent,security};

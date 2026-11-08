@@ -1,0 +1,470 @@
+[
+  {
+    "scope": "master",
+    "url": "/engine#/dashboard",
+    "title": "Dashboard",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/games",
+    "title": "Manage Games",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/rounds",
+    "title": "Game Log",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/active",
+    "title": "Manage Users · active",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/banned",
+    "title": "Manage Users · banned",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/email",
+    "title": "Manage Users · email",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/mobile",
+    "title": "Manage Users · mobile",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/kyc",
+    "title": "Manage Users · kyc",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/kyc-pending",
+    "title": "Manage Users · kyc-pending",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/players/all",
+    "title": "Manage Users · all",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/notify",
+    "title": "Send Notification",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/diamonds/pending",
+    "title": "Diamond Requests · pending",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/diamonds/approved",
+    "title": "Diamond Requests · approved",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/diamonds/rejected",
+    "title": "Diamond Requests · rejected",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/diamonds/all",
+    "title": "Diamond Requests · all",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/tickets/pending",
+    "title": "Support Tickets · pending",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/tickets/closed",
+    "title": "Support Tickets · closed",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/tickets/answered",
+    "title": "Support Tickets · answered",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/tickets/all",
+    "title": "Support Tickets · all",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/report/transactions",
+    "title": "Transaction History",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/report/logins",
+    "title": "Login History",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/report/notifications",
+    "title": "Notification History",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/report/transfers",
+    "title": "Transfer History",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/subscribers",
+    "title": "Subscribers",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/settings",
+    "title": "System Settings",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/extra/application",
+    "title": "Application",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/extra/server",
+    "title": "Server",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/extra/cache",
+    "title": "Cache",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/extra/update",
+    "title": "Update",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/report-request",
+    "title": "Report & Request",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/parity",
+    "title": "Functional QA · Xaxino Parity",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/general",
+    "title": "General Setting",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/logo",
+    "title": "Logo and Favicon",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/configuration",
+    "title": "System Configuration",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/notification",
+    "title": "Notification Setting",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/seo",
+    "title": "SEO Configuration",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/content/template",
+    "title": "Template Management",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/content/page",
+    "title": "Page Management",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/content/frontend",
+    "title": "Frontend Management",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/kyc",
+    "title": "KYC Setting",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/social",
+    "title": "Social Login Setting",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/language",
+    "title": "Language",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/extensions",
+    "title": "Extensions",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/cron",
+    "title": "Cron Job Setting",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/content/policy",
+    "title": "Policy Management",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/maintenance",
+    "title": "Maintenance Mode",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/gdpr",
+    "title": "GDPR Cookie",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/css",
+    "title": "Custom CSS",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/sitemap",
+    "title": "Sitemap XML",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/setting/robots",
+    "title": "Robots txt",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/profile",
+    "title": "Administrator Profile",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/activity",
+    "title": "Notification Center",
+    "status": "rendered"
+  },
+  {
+    "scope": "master",
+    "url": "/engine#/cron",
+    "title": "Cron Setup",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#activation",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#campaigns",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#broadcasts",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#recovery",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#help",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#overview",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#players",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#transactions",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#coins",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#games",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#website",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#team",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#policy",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#reports",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#reconciliation",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#billing",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#support",
+    "status": "rendered"
+  },
+  {
+    "scope": "agent-owner",
+    "url": "#audit",
+    "status": "rendered"
+  },
+  {
+    "scope": "storefront",
+    "url": "/search",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/slot/category/hot",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/promotions/all",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/user",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/user/history",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/user/messages",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/user/bonuses",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/referral",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/leaderboard",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/about-us",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/legal/terms-and-conditions",
+    "status": "rendered; capability gates retained"
+  },
+  {
+    "scope": "storefront",
+    "url": "/legal/responsible-gaming",
+    "status": "rendered; capability gates retained"
+  }
+]

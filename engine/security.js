@@ -349,7 +349,7 @@ function createSecurity({ pool, master, bootstrapUser, bootstrapPassword, public
     if (err.status === 429) res.set('Retry-After', '900');
     res.status(err.status).json({ error: err.message, code: err.code });
   }
-  return { init, mount, adminAuth, authenticated, session, full, protectedPage, errorHandler,
+  return { init, mount, reauthenticate, adminAuth, authenticated, session, full, protectedPage, errorHandler,
     currentActor: () => actorContext.getStore() || 'system', state };
 }
 module.exports = { createSecurity, AuthError, publicAccount };
