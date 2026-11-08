@@ -46,6 +46,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm test
       - run: npm run test:agency
+      - run: node tests/agency-operations-ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -20,7 +20,7 @@
       return E(x);
     }
   };
-  const date = (x) => (x ? new Date(x).toLocaleString("id-ID") : "—");
+  const date = (x) => (x ? new Date(x).toLocaleString("id-ID", {timeZone:"Asia/Jakarta"}) + " WIB" : "—");
   const master = location.pathname.replace(/\/$/, "") === "/agents";
   let me,
     tenant = new URLSearchParams(location.search).get("tenant_id") || "",
@@ -259,12 +259,12 @@
     ["overview", "Ringkasan", "overview"],
     ["players", "Player", "players.read"],
     ["transactions", "Deposit & Withdraw", "finance.read"],
-    ["coins", "Stok koin", "finance.read"],
+    ["coins", master ? "Persetujuan & riwayat coin" : "Request & riwayat coin", "finance.read"],
     ["games", "Game pilihan", "overview"],
     ["website", "Website & SEO", "website"],
     ["team", "Staff & IP", "team"],
     ["policy", "Aturan withdraw", "policy"],
-    ["reports", "Analitik", "reports"],
+    ["reports", "Laporan terpadu", "reports"],
     ["reconciliation", "Rekonsiliasi", "reports"],
     ["billing", "Invoice", "billing"],
     ["support", "Bantuan", "support"],
@@ -411,6 +411,49 @@
     const r=await request('/api/admin/agency/summary');b.innerHTML=`<div class="card"><p>${E(r.notice)} Nilai tidak dijumlahkan lintas currency/coin scale.</p>${table(['Agen','Environment','Player','Penjualan / withdraw','Stok tersedia','Pengecualian',''],r.items.map(t=>[E(t.name),E(t.environment),num(t.counts.players),num(t.totals.sales)+' / '+num(t.totals.withdrawals),num(t.balances.find(x=>x.code==='stock:available')?.amount),num(t.exceptions.length),`<a href="/agents?tenant_id=${E(t.id)}#overview">Kelola agen</a>`]))}</div>`;
   }
 
+  const filters = {coins:{period:'daily',sort:'desc',offset:0},transactions:{period:'daily',sort:'desc',offset:0},reports:{period:'daily',sort:'desc',offset:0}};
+  const filterQuery = name => '?' + new URLSearchParams(Object.entries(filters[name]).filter(([,v])=>v!=='' && v!==null));
+  function filterBar(name,extra='') {
+    const f=filters[name];
+    return `<form id="history-filter" class="card history-filter"><div class="fields">${field('from','Dari tanggal (WIB)',f.from||'','date')}${field('to','Sampai tanggal (WIB)',f.to||'','date')}${name==='transactions'?'':field('period','Kelompok periode',f.period,'select',[['daily','Harian'],['weekly','Mingguan'],['monthly','Bulanan']])}${field('sort','Urutan waktu',f.sort,'select',[['desc','Terbaru dahulu'],['asc','Terlama dahulu']])}${extra}</div><div class="toolbar"><button type="submit">Terapkan filter</button><button type="button" id="reset-history" class="quiet">Reset</button></div></form>`;
+  }
+  function bindFilters(name) {
+    $('#history-filter').onsubmit=e=>{e.preventDefault();filters[name]={...Object.fromEntries(new FormData(e.currentTarget)),offset:0};render();};
+    $('#reset-history').onclick=()=>{filters[name]={period:'daily',sort:'desc',offset:0};render();};
+  }
+  function pages(name,r,size) {
+    return `<div class="toolbar"><button class="quiet" id="history-prev" ${!filters[name].offset?'disabled':''}>Sebelumnya</button><span>Halaman ${Math.floor(filters[name].offset/size)+1}</span><button class="quiet" id="history-next" ${!r.has_more?'disabled':''}>Berikutnya</button></div>`;
+  }
+  function bindPages(name,size) {
+    $('#history-prev').onclick=()=>{filters[name].offset=Math.max(0,filters[name].offset-size);render();};
+    $('#history-next').onclick=()=>{filters[name].offset+=size;render();};
+  }
+  async function downloadReport(path,name){try{
+    const r=await fetch(base+path,{credentials:'same-origin'});if(!r.ok)throw Error((await r.json()).error);
+    const u=URL.createObjectURL(await r.blob()),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+  }catch(e){toast(e.message);}}
+  async function coinsView(b){
+    const r=await api('/coins'+filterQuery('coins')),s=r.settings;
+    const modeLabels={off:'Nonaktif',request:'Request otomatis · persetujuan master',auto:'Refill otomatis · diotorisasi master'};
+    const statusLabels={disabled:'Nonaktif',waiting:'Menunggu pemeriksaan saldo',tenant_paused:'Agen sedang dijeda',approval_inactive:'Otorisasi master perlu diperbarui',recent_rejection:'Ditunda setelah penolakan',above_threshold:'Saldo masih di atas ambang',pending_request:'Ada request menunggu',daily_limit:'Batas harian tercapai',monthly_limit:'Batas bulanan tercapai',stock_limit:'Limit stok agen tercapai',refilled:'Refill selesai',requested:'Request otomatis dibuat'};
+    b.innerHTML=`<div class="toolbar">${can('coins.request')?button('request','','Request coin'):''}<button id="export-coins" class="secondary">Export riwayat</button></div><div class="card"><h2>Stok & auto refill</h2><div class="cards">${r.stock.map(x=>`<div class="metric"><span>${E(x.code==='stock:available'?'Coin tersedia':x.code==='stock:reserved'?'Coin dicadangkan':x.code)}</span><strong>${num(x.amount)}</strong></div>`).join('')}</div><p><strong>${E(modeLabels[s.mode])}</strong> · ${E(statusLabels[s.last_status]||s.last_status)}</p><p>Nominal tetap 100 juta coin per refill (${num(r.batch)} unit coin). Ambang ${num(s.threshold)} · batas harian ${num(s.daily_limit)} · bulanan ${num(s.monthly_limit)}.</p><p class="muted">Pemeriksaan terakhir: ${date(s.checked_at)}. Semua angka saldo menggunakan unit coin agen. Refill tidak menarik dana bank.</p>${can('coins.request')?button('refill','','Atur auto refill'):''}</div>`;
+    if(r.worker_enabled===false)b.innerHTML+='<div class=notice>Pemeriksaan otomatis belum berjalan pada layanan ini. Hubungi master untuk mengaktifkan worker demo.</div>';
+    if(r.totals_truncated)b.innerHTML+='<div class=notice>Ringkasan menampilkan maksimal 1.000 periode. Persempit rentang tanggal untuk hasil lengkap.</div>';
+    b.innerHTML+=filterBar('coins',field('status','Status request',filters.coins.status||'','select',[['','Semua'],['requested','Menunggu'],['approved','Disetujui'],['rejected','Ditolak']]));
+    b.innerHTML+=`<div class="card"><h2>Ringkasan berdasarkan waktu pengajuan</h2>${table(['Periode WIB','Jumlah request','Disetujui (coin)','Menunggu (coin)'],r.totals.map(x=>[E(x.period),num(x.requests),num(x.approved),num(x.pending)]))}</div><div class="card"><h2>Riwayat request & persetujuan</h2>${table(['ID / sumber','Coin / status','Pengaju / waktu','Pemeriksa / waktu','Saldo sebelum → sesudah','Catatan','Aksi'],r.items.map(x=>[E(x.id.slice(0,8))+'<br>'+E(x.source==='auto'?'Otomatis':'Manual'),num(x.amount)+'<br>'+pill(x.status),E(x.requested_by)+'<br>'+date(x.created_at),E(x.reviewed_by||'—')+'<br>'+date(x.reviewed_at)+(x.credited_at?'<br><small>Dikreditkan '+date(x.credited_at)+'</small>':''),x.balance_before===null||x.balance_before===undefined?'—':num(x.balance_before)+' → '+num(x.balance_after),E(x.reason)+(x.review_reason?'<br><small>'+E(x.review_reason)+'</small>':''),master&&x.status==='requested'?button('allocation',x.id,'Review'):'']))}${pages('coins',r,100)}</div>`;
+    bindFilters('coins');bindPages('coins',100);
+    $('#export-coins').onclick=()=>downloadReport('/coins/export'+filterQuery('coins'),'coin-history.csv');
+    b.querySelector('[data-action=request]')?.addEventListener('click',()=>form('Request coin',field('amount','Jumlah (unit coin)',r.batch)+field('reason','Alasan','','textarea'),(p,k)=>api('/coins','POST',{...p,idempotency_key:k}),'Kirim request'));
+    b.querySelectorAll('[data-action=allocation]').forEach(el=>el.onclick=()=>form('Review request coin',field('decision','Keputusan','approve','select',[['approve','Approve'],['reject','Reject']])+field('reason','Catatan (wajib jika ditolak)','','textarea'),p=>api('/coins/'+el.dataset.id+'/review','POST',p)));
+    b.querySelector('[data-action=refill]')?.addEventListener('click',()=>form('Pengaturan auto refill',`<p class="wide">Request otomatis tetap menunggu persetujuan master. Refill otomatis memerlukan otorisasi master dan mengikuti batas harian/bulanan.</p>`+field('mode','Mode',s.mode==='auto'&&!master?'off':s.mode,'select',[['off','Nonaktif'],['request','Request otomatis'],...(master?[['auto','Refill otomatis disetujui master']]:[])])+field('threshold','Ambang saldo (unit coin)',s.threshold)+field('daily_limit','Batas harian (unit coin)',s.daily_limit)+field('monthly_limit','Batas bulanan (unit coin)',s.monthly_limit)+(master?field('current_password','Password master','','password')+field('code','Kode authenticator'):''),p=>api('/coins/refill','PUT',{...p,version:s.version})));
+  }
+  async function reportsView(b){
+    const r=await api('/reports'+filterQuery('reports'));
+    b.innerHTML=filterBar('reports')+`<div class="notice">${E(r.notice)}</div><div class="card"><h2>Penjualan & penarikan · ${E(r.cash_currency)}</h2><p>Termasuk koreksi. Selisih kedua kolom bukan laba.</p>${table(['Periode WIB','Penjualan coin','Penarikan dibayar'],r.cashflow.map(x=>[E(x.period),num(x.sales),num(x.withdrawals)]))}</div><div class="card"><h2>Aktivitas game · unit coin</h2>${table(['Game','Ronde settled','Stake','Payout','Net win rounds','Observed RTP'],r.items.map(x=>[E(x.name),num(x.settled),num(x.stake),num(x.payout),num(x.net_wins),BigInt(x.stake)>0n?(Number(BigInt(x.payout)*10000n/BigInt(x.stake))/100).toFixed(2)+'%':'—']))}</div>${can('finance.read')?'<button id="export-transactions" class="secondary">Export transaksi sesuai periode</button>':''}`;
+    if(r.cashflow_truncated)b.insertAdjacentHTML('beforeend','<div class=notice>Ringkasan menampilkan maksimal 1.000 periode. Persempit rentang tanggal untuk hasil lengkap.</div>');
+    bindFilters('reports');$('#export-transactions')?.addEventListener('click',()=>downloadReport('/reports/transactions'+filterQuery('reports'),'transactions.csv'));
+  }
+
   async function render() {
     if (!$("#body")) return;
     if (master && !tenant) {
@@ -444,7 +487,7 @@
       if(view === "recovery" && can("recovery")) return await recoveryView(b);
       if(view === "network" && master) return await networkView(b);
       if (view === "overview") {
-        const r = await api("/overview");
+        const [r,worklist] = await Promise.all([api("/overview"),api("/worklist")]);
         const n = (code) =>
           r.balances.find((x) => x.code === code)?.amount || "0";
         b.innerHTML = `<div class="notice">${r.tenant.environment === "sandbox" ? "MODE SIMULASI · Pembayaran dan koin tidak bernilai uang nyata." : "Mode operasional"}</div><div class="cards">${[
@@ -477,6 +520,7 @@
             )
             .map((x) => [E(x.code), E(x.unit), num(x.amount)]),
         )}</div><p class="muted">Diperbarui ${date(r.as_of)}</p>`;
+        b.insertAdjacentHTML('afterbegin',`<div class="card"><h2>Pusat operasional</h2><div class="cards">${(worklist.items||[]).map(x=>`<a class="metric action-metric" href="#${E(x.view)}"><span>${E(x.title)}</span><strong>${num(x.count)}</strong><small>Buka daftar →</small></a>`).join('')}</div></div>`);
         b.querySelector('[data-action="fund"]')?.addEventListener("click", () =>
           form(
             "Tambah dana simulasi",
@@ -525,8 +569,8 @@
               playerDetail(await api("/players/" + el.dataset.id))),
         );
       } else if (view === "transactions") {
-        const r = await api("/transactions");
-        b.innerHTML =
+        const r = await api("/transactions"+filterQuery("transactions"));
+        b.innerHTML = filterBar('transactions',field('search','Username / ID transaksi',filters.transactions.search||'')+field('kind','Jenis',filters.transactions.kind||'','select',[['','Semua'],['deposit','Deposit'],['withdraw','Withdraw']])+field('state','Status',filters.transactions.state||'','select',[['','Semua'],...['pending','review','credited','queued','submitted','paid','unknown','awaiting_agent_funding','payment_received_credit_pending','rejected','expired','failed','refunded','cancelled'].map(x=>[x,x])])) +
           '<div class="card">' +
           table(
             ["Transaksi", "Nominal / Koin", "Status", "Waktu", "Aksi"],
@@ -577,6 +621,8 @@
             ]),
           ) +
           "</div>";
+        b.innerHTML+=pages('transactions',r,200);
+        bindFilters('transactions');bindPages('transactions',200);
         b.querySelectorAll("[data-action]").forEach(
           (el) =>
             (el.onclick = async () => {
@@ -667,41 +713,7 @@
             }),
         );
       } else if (view === "coins") {
-        const r = await api("/coins");
-        b.innerHTML = `<div class="toolbar">${can("coins.request") ? button("request", "", "Request alokasi koin") : ""}</div><div class="card">${table(
-          ["Koin", "Status", "Alasan", "Tanggal", ""],
-          r.items.map((x) => [
-            num(x.amount),
-            pill(x.status),
-            E(x.reason),
-            date(x.created_at),
-            master && x.status === "requested"
-              ? button("allocation", x.id, "Review")
-              : "",
-          ]),
-        )}</div>`;
-        b.querySelector('[data-action="request"]')?.addEventListener(
-          "click",
-          () =>
-            form(
-              "Request alokasi koin",
-              field("amount", "Jumlah koin", "", "number") +
-                field("reason", "Alasan", "", "textarea"),
-              (p) => api("/coins", "POST", p),
-            ),
-        );
-        b.querySelectorAll('[data-action="allocation"]').forEach(
-          (el) =>
-            (el.onclick = () =>
-              form(
-                "Review alokasi",
-                field("decision", "Keputusan", "approve", "select", [
-                  ["approve", "Approve"],
-                  ["reject", "Reject"],
-                ]),
-                (p) => api("/coins/" + el.dataset.id + "/review", "POST", p),
-              )),
-        );
+        await coinsView(b);
       } else if (view === "games") {
         const r = await api("/games");
         b.innerHTML =
@@ -912,50 +924,7 @@
           ) +
           '</p><a href="#support">Buka tiket dukungan</a></div>';
       } else if (view === "reports") {
-        const r = await api("/reports");
-        b.innerHTML =
-          '<div class="toolbar"><button id="export-transactions" class="secondary">Export transaksi bulan ini</button></div><div class="notice">' +
-          E(r.notice) +
-          '</div><div class="card">' +
-          table(
-            [
-              "Game",
-              "Ronde settled",
-              "Stake",
-              "Payout",
-              "Net win rounds",
-              "Observed RTP",
-            ],
-            r.items.map((x) => [
-              E(x.name),
-              num(x.settled),
-              num(x.stake),
-              num(x.payout),
-              num(x.net_wins),
-              BigInt(x.stake) > 0n
-                ? (
-                    Number((BigInt(x.payout) * 10000n) / BigInt(x.stake)) / 100
-                  ).toFixed(2) + "%"
-                : "—",
-            ]),
-          ) +
-          "</div>";
-        $("#export-transactions").onclick = async () => {
-          try {
-            const r = await fetch(base + "/reports/export", {
-              credentials: "same-origin",
-            });
-            if (!r.ok) throw Error((await r.json()).error);
-            const u = URL.createObjectURL(await r.blob()),
-              a = document.createElement("a");
-            a.href = u;
-            a.download = "transaksi.csv";
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(u), 1000);
-          } catch (e) {
-            toast(e.message);
-          }
-        };
+        await reportsView(b);
       } else if (view === "billing") {
         const r = await api("/billing");
         b.innerHTML = `<div class="toolbar">${button("billing-preview", "", "Preview periode")}${master ? button("billing-close", "", "Tutup buku") + button("contract", "", "Atur kontrak") : ""}</div><div class="card"><h2>Kontrak</h2>${table(

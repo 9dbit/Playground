@@ -4,6 +4,8 @@ Original multi-game administration console inspired by the structure of the Xaxi
 
 ## Agency sandbox
 
+- [Benchmark Oxplay: workflow, fitur yang diterapkan, batas demo dan backlog](sources/OXPLAY_BENCHMARK.md).
+
 - [Master dashboard](https://playground-agent-sandbox-production.up.railway.app/agents) and [agent dashboard](https://playground-agent-sandbox-production.up.railway.app/agency).
 - Public demonstrations: [shared gateway account](https://playground-agent-sandbox-production.up.railway.app/site/demo-shared) and [split deposit/disbursement accounts](https://playground-agent-sandbox-production.up.railway.app/site/demo-split).
 - [Release, access and deployed verification](sources/PLAYGROUND_AG_DEPLOYMENT_CHECKPOINT_2026-11-03.md), [implementation status](sources/PLAYGROUND_AG_IMPLEMENTATION_STATUS_2026-11-03.md), and [test results](sources/PLAYGROUND_AG_UAT_2026-11-03.md).

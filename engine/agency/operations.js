@@ -1,7 +1,9 @@
 "use strict";
 const { wrap } = require("./auth");
-const { fail, periodBounds, period, audit } = require("./core");
+const { fail, periodBounds, period, audit, roles } = require("./core");
 const guide = [
+  {title:"Request & auto refill coin",body:"Buka Request & riwayat coin. Request manual memiliki ID yang tetap saat dicoba ulang. Agen dapat menjadwalkan request 100 juta coin; refill langsung memerlukan otorisasi master. Batas harian, bulanan, stok, dan status agen tetap diperiksa. Riwayat dan ekspor mencatat waktu pengajuan, pemeriksa, kredit, serta saldo sebelum–sesudah."},
+  {title:"Laporan berdasarkan periode",body:"Filter tanggal menggunakan WIB, termasuk seluruh tanggal akhir. Ringkasan coin dikelompokkan menurut waktu pengajuan; arus kas berdasarkan journal termasuk koreksi; ronde berdasarkan waktu selesai. Penjualan dan penarikan tetap terpisah dari stok coin dan laba."},
   {title:"Brand dan kesiapan",body:"Atur logo, favicon, warna, referral, leaderboard dan maintenance pada Brand & kesiapan. Pemeliharaan menahan registrasi, deposit, bonus dan ronde baru; withdraw dan bantuan tetap tersedia."},
   {title:"Bonus dan inbox",body:"Kampanye bonus memakai anggaran yang dicadangkan dari stok agen, satu klaim per pemain, tanpa wagering. Bonus bukan penjualan koin. Tutup kampanye untuk mengembalikan sisa anggaran. Pengumuman inbox hanya untuk pemain aktif agen sendiri."},
   {title:"Pemulihan akun",body:"Pemilik akun mengajukan pemulihan dari login. Admin memverifikasi identitas di luar sistem, lalu memakai password dan authenticator untuk menerbitkan tautan 15 menit, sekali pakai. Semua sesi dicabut setelah reset; MFA tetap aktif. Email otomatis hanya untuk email pemain yang sudah diverifikasi dan provider yang dikonfigurasi."},
@@ -47,6 +49,18 @@ const cell = (x) =>
 function mountOperations(app, { pool, agency, chatvice = {} }) {
   const prefixes = ["/api/agency", "/api/admin/agency/tenants/:tenant"];
   for (const prefix of prefixes) {
+    app.get(prefix + '/worklist',wrap(async(req,res)=>{
+      agency.allow(req,'overview'); const tid=agency.scope(req),a=agency.actor(req);
+      const can=p=>a.kind==='master'||(roles[a.role]||[]).includes(p),items=[];
+      const add=async(permission,title,view,sql)=>{if(can(permission)){const r=(await pool.query(sql,[tid])).rows[0];items.push({title,view,count:r.n});}};
+      await add('finance.read','Request coin menunggu','coins',"SELECT count(*)::int AS n FROM agency_allocations WHERE tenant_id=$1 AND status='requested'");
+      await add('finance.read','Pembayaran perlu ditinjau','transactions',"SELECT count(*)::int AS n FROM agency_transactions WHERE tenant_id=$1 AND (state IN ('review','unknown','awaiting_agent_funding','payment_received_credit_pending') OR (method='manual' AND state='pending'))");
+      await add('support','Tiket belum ditutup','support',"SELECT count(*)::int AS n FROM agency_tickets WHERE tenant_id=$1 AND status<>'closed'");
+      await add('website','Konten belum dipublikasikan','website',"SELECT count(*)::int AS n FROM agency_content WHERE tenant_id=$1 AND (published IS NULL OR draft IS DISTINCT FROM published)");
+      await add('recovery','Permintaan pemulihan','recovery',"SELECT count(*)::int AS n FROM agency_recovery_requests WHERE tenant_id=$1 AND resolved_at IS NULL");
+      await add('rewards','Kampanye berakhir perlu ditutup','campaigns',"SELECT count(*)::int AS n FROM agency_campaigns WHERE tenant_id=$1 AND state='active' AND ends_at<=now()");
+      res.json({items,as_of:new Date().toISOString()});
+    }));
     app.get(
       prefix + "/help",
       wrap(async (req, res) => {
@@ -62,7 +76,7 @@ function mountOperations(app, { pool, agency, chatvice = {} }) {
           ? (home?.chatvice_configured ? (home.chatvice_enabled ? home.chatvice_merchant : null) : chatvice.tenants?.[t.slug]?.staff)
           : chatvice.masterMerchant;
         res.json({
-          version: "2026-11-03.1",
+          version: "2026-11-08.oxplay-1",
           guide,
           chatvice:
             merchant

@@ -104,7 +104,11 @@ async function main(){
    await page.getByRole('link',{name:"View this player's observed rounds"}).click();await page.getByRole('heading',{name:'Game Log / staging'}).waitFor();assert.equal(await page.locator('tbody tr').count(),3);
    await page.locator('#tabs [data-tab=reconciliation]').click();await page.getByRole('heading',{name:'Source-to-receiver reconciliation'}).waitFor();await page.getByText('prefix_matched',{exact:true}).waitFor();
    await page.screenshot({path:path.join(OUT,'data-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(OUT,'data-mobile.png'),fullPage:true});assert.deepEqual(errors,[]);
-   await page.goto(base+'/engine');await page.getByRole('heading',{name:'Production Game Data'}).waitFor();assert.equal(await page.getByRole('link',{name:'Game Data / Reconciliation'}).count(),1);
+   await page.goto(base+'/engine');await page.getByRole('heading',{name:'Production Game Data'}).waitFor();
+   // The unified menu replaced the duplicate legacy sidebar link. Exercise the
+   // dashboard's source-data action and verify its actual destination instead.
+   const openData=page.locator('[data-cp15-summary] a[href="/data"]');await openData.waitFor();await openData.click();
+   await page.getByRole('heading',{name:'Game summary',exact:true}).waitFor();assert.equal(new URL(page.url()).pathname,'/data');
    return {apiMocked:false,desktop:true,mobile390:true,scopedDrilldowns:true,errors:0};
   }finally{await browser.close()}
  });
