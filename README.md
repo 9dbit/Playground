@@ -59,3 +59,5 @@ Native TOTP is implemented. This branch adds an agency ledger, cashier simulator
 ## Checkpoints
 - `sources/PLAYGROUND_CHECKPOINT_08.md`: security implementation, onboarding, acceptance coverage and remaining work.
 - `sources/PLAYGROUND_CHECKPOINT_07.md`: baseline deep-admin features and disconnected integrations.
+
+Agency hero banners: open **Website & SEO → Edit → Hero banner** to upload or replace a JPG/PNG/WebP, preview it, or choose **Delete banner**. Click **Simpan**, then **Publish** on the page to update the storefront. The browser optimizes uploads up to 10 MB / 16 megapixels; the server decodes and re-encodes them as WebP (up to 1600 px and 500 KB). Banner assets persist in PostgreSQL across redeploys, are tenant-owned, and have a 50 MB per-tenant storage quota. Repeated identical uploads are deduplicated. Deleting a banner removes its content reference; historical assets remain available for rollback. Uploaded images are public website assets at unguessable URLs, so upload only material intended for publication. Staff need the Website permission.

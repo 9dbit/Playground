@@ -1,4 +1,5 @@
 "use strict";
+const { normalizeArtwork } = require("../artwork");
 const dns = require("node:dns/promises");
 const {
   fail,
@@ -111,6 +112,12 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
     next();
   });
   async function canonical(db, t, p) {
+    if (p.banner_url.startsWith("/media/agency/")) {
+      const asset = /^\/media\/agency\/([a-f0-9-]+)\/([a-f0-9-]+)\.webp$/.exec(p.banner_url);
+      if (!asset || asset[1] !== t) fail(400, "Banner harus milik agen ini");
+      const found = await db.query("SELECT 1 FROM agency_banner_assets WHERE tenant_id=$1 AND id=$2", [t, id(asset[2])]);
+      if (!found.rowCount) fail(400, "Banner tidak ditemukan");
+    }
     if (p.chatvice_enabled) {
       const tenant = (
         await db.query("SELECT slug FROM agency_tenants WHERE id=$1", [t])
@@ -155,7 +162,31 @@ function createContent({ pool, agency, publicOrigin, chatvice }) {
     return q.rows[0];
   }
   function mount(app) {
+    // Immutable, public website assets; retained for content revision rollback.
+    app.get("/media/agency/:tenant/:asset.webp", wrap(async (req, res) => {
+      const t = id(req.params.tenant);
+      if (req.agencySite && req.agencySite.id !== t) fail(404, "Banner tidak ditemukan");
+      const q = await pool.query("SELECT bytes FROM agency_banner_assets WHERE tenant_id=$1 AND id=$2", [t, id(req.params.asset)]);
+      if (!q.rowCount) fail(404, "Banner tidak ditemukan");
+      res.type("image/webp").set("Cache-Control", "public, max-age=31536000, immutable").send(Buffer.from(q.rows[0].bytes));
+    }));
     for (const prefix of ["/api/agency", "/api/admin/agency/tenants/:tenant"]) {
+      app.post(prefix + "/banner-upload", wrap(async (req, res) => {
+        agency.allow(req, "website");
+        const t = agency.scope(req);
+        const image = await normalizeArtwork(req.body.image);
+        const hash = digest(image.bytes.toString("base64"));
+        const asset = await locked(pool, t, async db => {
+          const old = await db.query("SELECT id,width,height FROM agency_banner_assets WHERE tenant_id=$1 AND hash=$2", [t, hash]);
+          if (old.rowCount) return old.rows[0];
+          const usage = await db.query("SELECT COALESCE(sum(octet_length(bytes)),0)::text AS size FROM agency_banner_assets WHERE tenant_id=$1", [t]);
+          if (Number(usage.rows[0].size) + image.bytes.length > 50000000) fail(409, "Penyimpanan banner penuh; hubungi Playground");
+          const q = await db.query("INSERT INTO agency_banner_assets(tenant_id,hash,bytes,width,height) VALUES($1,$2,$3,$4,$5) RETURNING id,width,height", [t, hash, image.bytes, image.width, image.height]);
+          await audit(db, t, agency.actor(req).id, "banner.uploaded", q.rows[0].id, { size: image.bytes.length });
+          return q.rows[0];
+        });
+        res.status(201).json({ ...asset, url: `/media/agency/${t}/${asset.id}.webp` });
+      }));
       app.get(
         prefix + "/content",
         wrap(async (req, res) => {

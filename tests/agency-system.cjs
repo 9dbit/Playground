@@ -903,6 +903,38 @@ async function main() {
       );
     },
   );
+  await check("BANNERS", "Banner upload, replace, delete, rollback and tenant permissions", async () => {
+    const sharp = require("sharp");
+    const png = await sharp({create: {width: 900, height: 300, channels: 3, background: "#7759ed"}}).png().toBuffer();
+    const image = "data:image/png;base64," + png.toString("base64");
+    const asset = await ok("/api/agency/banner-upload", "POST", {image}, "marketingA");
+    assert.equal((await ok("/api/agency/banner-upload", "POST", {image}, "marketingA")).id, asset.id);
+    assert.equal((await req("/api/agency/banner-upload", "POST", {image}, null)).status, 401);
+    assert.equal((await req("/api/agency/banner-upload", "POST", {image}, "financeA")).status, 403);
+    assert.equal((await req("/api/agency/banner-upload", "POST", {image: "data:image/png;base64,YmFk"}, "marketingA")).status, 400);
+    const fetched = await fetch(base + asset.url);
+    assert.equal(fetched.status, 200);
+    assert.match(fetched.headers.get("content-type"), /image\/webp/);
+    assert.equal((await sharp(Buffer.from(await fetched.arrayBuffer())).metadata()).width, 900);
+    assert.equal((await req(asset.url.replace(A.id, B.id), "GET", undefined, null)).status, 404);
+    const content = {title: "Banner QA", banner_url: asset.url};
+    assert.equal((await req("/api/agency/content/banner-qa", "PUT", {content, expected_version: 0}, "ownerB")).status, 400);
+    let c = await ok("/api/agency/content/banner-qa", "PUT", {content, expected_version: 0}, "marketingA");
+    const publish = () => ok("/api/agency/content/" + c.id + "/publish", "POST", {expected_version: c.version}, "marketingA");
+    await publish();
+    assert.ok((await req("/site/" + A.slug + "/p/banner-qa")).text.includes(asset.url));
+    const other = await sharp({create: {width: 900, height: 300, channels: 3, background: "#ef3340"}}).png().toBuffer();
+    const replacement = await ok("/api/agency/banner-upload", "POST", {image: "data:image/png;base64," + other.toString("base64")}, "marketingA");
+    c = await ok("/api/agency/content/banner-qa", "PUT", {content: {...content, banner_url: replacement.url}, expected_version: c.version}, "marketingA");
+    await publish();
+    assert.ok((await req("/site/" + A.slug + "/p/banner-qa")).text.includes(replacement.url));
+    c = await ok("/api/agency/content/banner-qa", "PUT", {content: {...content, banner_url: ""}, expected_version: c.version}, "marketingA");
+    await publish();
+    assert.ok(!(await req("/site/" + A.slug + "/p/banner-qa")).text.includes('class="hero-image"'));
+    await ok("/api/agency/content/" + c.id + "/rollback", "POST", {version: 1, expected_version: c.version}, "marketingA");
+    assert.ok((await req("/site/" + A.slug + "/p/banner-qa")).text.includes(asset.url));
+    return {durableImages: true, tenantIsolation: true, rollbackRestoresImage: true};
+  });
   await check(
     "T15",
     "Staff role/session revoke and CIDR restriction enforced",
@@ -1457,6 +1489,34 @@ async function main() {
             path: path.join(__dirname, "../test-results/agency-mobile.png"),
             fullPage: true,
           });
+          const agentContext = await browser.newContext();
+          const [agentCookie, agentValue] = creds.get("marketingA").cookie.split("=");
+          await agentContext.addCookies([{name: agentCookie, value: agentValue, url: base, httpOnly: true, sameSite: "Strict"}]);
+          const editor = await agentContext.newPage();
+          editor.on("pageerror", e => errors.push(e.message));
+          await editor.goto(base + "/agency#website");
+          const row = editor.locator("tbody tr").filter({has: editor.getByRole("cell", {name: "banner-qa", exact: true})});
+          const sharp = require("sharp");
+          for (const color of ["#2299dd", "#ee9933"]) {
+            await row.getByRole("button", {name: "Edit", exact: true}).click();
+            const buffer = await sharp({create: {width: 1200, height: 400, channels: 3, background: color}}).png().toBuffer();
+            await editor.locator('.banner-editor input[type="file"]').setInputFiles({name: "hero.png", mimeType: "image/png", buffer});
+            await editor.getByText(/siap disimpan/).waitFor();
+            assert.ok(await editor.locator('.banner-preview').evaluate(img => img.complete && img.naturalWidth > 0));
+            await editor.setViewportSize({width: 390, height: 844});
+            assert.ok(await editor.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+            await editor.screenshot({path: path.join(__dirname, "../test-results/agency-banner-mobile.png"), fullPage: true});
+            await editor.getByRole("button", {name: "Simpan", exact: true}).click();
+            await editor.locator('#modal').waitFor({state: 'hidden'});
+          }
+          await row.getByRole("button", {name: "Edit", exact: true}).click();
+          await editor.getByRole("button", {name: "Delete banner", exact: true}).click();
+          assert.equal(await editor.locator('[name="banner_url"]').inputValue(), "");
+          await editor.getByRole("button", {name: "Simpan", exact: true}).click();
+          await editor.locator('#modal').waitFor({state: 'hidden'});
+          await row.getByRole("button", {name: "Edit", exact: true}).click();
+          assert.equal(await editor.locator('[name="banner_url"]').inputValue(), "");
+          await agentContext.close();
           await page.goto(base + "/site/" + A.slug);
           await page.getByRole("button", { name: "Akun & Wallet" }).click();
           await page

@@ -82,6 +82,67 @@
     };
     if (!d.open) d.showModal();
   }
+  function bannerEditor() {
+    const d = $("#modal"), url = d.querySelector('[name="banner_url"]');
+    const box = document.createElement("section");
+    box.className = "banner-editor wide";
+    box.innerHTML = `<h3>Hero banner</h3><img class="banner-preview" alt="Preview hero banner" hidden><p class="banner-status muted" role="status"></p><div class="toolbar"><button type="button" class="secondary" data-banner="choose">Upload gambar</button><button type="button" class="quiet" data-banner="delete">Delete banner</button></div><input type="file" accept="image/png,image/jpeg,image/webp" hidden><p class="muted">JPG, PNG, atau WebP, maksimal 10 MB. Gambar dioptimalkan otomatis. Simpan lalu Publish untuk menampilkan perubahan.</p>`;
+    url.parentElement.before(box);
+    const preview = box.querySelector("img"), status = box.querySelector('[role="status"]'), file = box.querySelector("input");
+    const choose = box.querySelector('[data-banner="choose"]'), remove = box.querySelector('[data-banner="delete"]');
+    let pending = "", generation = 0;
+    const update = () => {
+      const source = pending || url.value.trim();
+      preview.hidden = !source;
+      if (source) preview.src = source; else preview.removeAttribute("src");
+      choose.textContent = source ? "Replace gambar" : "Upload gambar";
+      remove.disabled = !source;
+    };
+    preview.onerror = () => { status.textContent = "Preview tidak tersedia. Periksa URL atau upload gambar."; };
+    choose.onclick = () => file.click();
+    remove.onclick = () => {
+      generation++; pending = ""; url.value = ""; file.value = "";
+      status.textContent = "Banner dihapus dari draft. Klik Simpan lalu Publish."; update();
+    };
+    url.oninput = () => { generation++; pending = ""; status.textContent = ""; update(); };
+    file.onchange = async () => {
+      const selected = file.files[0]; if (!selected) return;
+      const token = ++generation;
+      choose.disabled = true; d.querySelector('[type="submit"]').disabled = true;
+      status.textContent = "Menyiapkan gambar…";
+      let bitmap;
+      try {
+        if (!['image/png','image/jpeg','image/webp'].includes(selected.type) || selected.size > 10000000) throw Error("Pilih JPG, PNG, atau WebP maksimal 10 MB.");
+        bitmap = await createImageBitmap(selected);
+        if (bitmap.width * bitmap.height > 16777216) throw Error("Resolusi gambar maksimal 16 megapiksel.");
+        const canvas = document.createElement('canvas');
+        let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+        let blob;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
+          if (blob && blob.size <= 500000) break;
+          scale *= 0.75;
+        }
+        if (!blob || blob.size > 500000) throw Error("Gambar belum dapat dioptimalkan. Pilih gambar lain.");
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
+        });
+        if (token !== generation || !d.open) return;
+        pending = data;
+        status.textContent = `${selected.name} · ${Math.ceil(blob.size / 1000)} KB · siap disimpan`;
+        update();
+      } catch (e) { if (token === generation) status.textContent = e.message || "Gambar gagal dibaca"; }
+      finally { bitmap?.close(); choose.disabled = false; d.querySelector('[type="submit"]').disabled = false; file.value = ""; }
+    };
+    update();
+    return async () => {
+      if (pending) { const result = await api('/banner-upload', 'POST', { image: pending }); url.value = result.url; pending = ""; update(); }
+      return url.value.trim();
+    };
+  }
   function inspect(title, data) {
     const d = $("#modal");
     d.innerHTML = `<header><h2>${E(title)}</h2><button class="quiet" id="close-dialog">Tutup</button></header><pre class="json">${E(JSON.stringify(data, null, 2))}</pre>`;
@@ -915,7 +976,8 @@
             ]),
           ) +
           "</div>";
-        const edit = (c) =>
+        const edit = (c) => {
+          let saveBanner;
           form(
             "Konten & SEO",
             (!c ? field("slug", "Slug (home untuk beranda)", "home") : "") +
@@ -954,8 +1016,9 @@
                   ["true", "Aktif jika integrasi tersedia"],
                 ],
               ),
-            (p) => {
+            async (p) => {
               const { slug: s, ...content } = p;
+              content.banner_url = await saveBanner();
               content.chatvice_enabled = p.chatvice_enabled === "true";
               return api(
                 "/content/" + encodeURIComponent(c?.slug || s),
@@ -964,6 +1027,8 @@
               );
             },
           );
+          saveBanner = bannerEditor();
+        };
         b.querySelector('[data-action="new-content"]').onclick = () =>
           edit(null);
         b.querySelectorAll('[data-action="content"]').forEach(

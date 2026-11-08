@@ -577,3 +577,9 @@ dialog footer {
     width: 100%;
   }
 }
+
+.banner-editor { min-width: 0; background: var(--bg, #f4f5fa); border-radius: 18px; padding: 16px; }
+.banner-preview { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: 12px; margin: 12px 0; }
+.banner-preview[hidden] { display: none; }
+.banner-editor .toolbar { flex-wrap: wrap; }
+.banner-status { overflow-wrap: anywhere; }

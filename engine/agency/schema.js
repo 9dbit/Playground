@@ -166,6 +166,11 @@ CREATE TABLE IF NOT EXISTS agency_invoices (
  total numeric(38,0) NOT NULL, paid numeric(38,0) NOT NULL DEFAULT 0, statement jsonb NOT NULL,
  created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(tenant_id,period)
 );
+CREATE TABLE IF NOT EXISTS agency_banner_assets (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL REFERENCES agency_tenants(id),
+ hash text NOT NULL, bytes bytea NOT NULL, width integer NOT NULL, height integer NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(tenant_id,hash)
+);
 CREATE TABLE IF NOT EXISTS agency_content (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL REFERENCES agency_tenants(id), slug text NOT NULL,
  version integer NOT NULL DEFAULT 1, draft jsonb NOT NULL DEFAULT '{}', published jsonb, scheduled_at timestamptz,
