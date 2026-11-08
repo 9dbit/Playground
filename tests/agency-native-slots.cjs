@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn}=require('node:child_process');
-module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameSecret})=>{
+module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,req,creds,base,gameSecret})=>{
  for(const game of [
   {name:'Mahjong',slug:'mahjong-wild',key:'qa-mahjong',repo:process.env.MAHJONG_NATIVE_PATH,db:'MAHJONG_AGENCY_DB_PATH',route:'/',spin:'/api/spin',button:'#spin-btn',title:'mahjong wild',python:true},
   {name:'Skygate',slug:'skygate-5000',key:'qa-skygate',repo:process.env.SKYGATE_NATIVE_PATH,db:'SKYGATE_AGENCY_DB_PATH',route:'/play/',spin:'/api/agency/spin',button:'#spin',title:'skygate 5000'}]){
@@ -16,7 +16,7 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
    await ok('/api/admin/agency/tenants/'+cor.id+'/games/'+gid,'PUT',{entitled:true,selected:true,position:2});
    const net=require('node:net').createServer();await new Promise(r=>net.listen(0,'127.0.0.1',r));const port=net.address().port;await new Promise(r=>net.close(r));
    const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'native-slots-')),origin='http://127.0.0.1:'+port;
-   const env={...process.env,PORT:String(port),AGENCY_WALLET_MODE:'sandbox',AGENCY_WALLET_ORIGIN:base,AGENCY_WALLET_KEY_ID:game.key,AGENCY_WALLET_SECRET:gameSecret,AGENCY_WALLET_LOCAL_QA:'1',[game.db]:path.join(tmp,'wallet.sqlite'),SKYGATE_RELEASE_DIR:path.join(tmp,'releases')};
+   const env={...process.env,PORT:String(port),AGENCY_WALLET_MODE:'sandbox',AGENCY_WALLET_ORIGIN:base,AGENCY_WALLET_KEY_ID:game.key,AGENCY_WALLET_SECRET:gameSecret,AGENCY_WALLET_LOCAL_QA:'1',AGENCY_STUDIO_SYNC:'1',[game.db]:path.join(tmp,'wallet.sqlite'),SKYGATE_RELEASE_DIR:path.join(tmp,'releases')};
    let child,browser,storefront,logs='';
    async function start(){child=spawn(game.python?(process.env.NATIVE_PYTHON||'python'):process.execPath,game.python?['-m','uvicorn','agency_runtime:app','--host','127.0.0.1','--port',String(port),'--no-access-log']:['server.mjs'],{cwd:game.repo,env,stdio:['ignore','pipe','pipe']});child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);for(let i=0;i<100;i++){try{if((await fetch(origin+'/health')).ok)return;}catch{}await new Promise(r=>setTimeout(r,100));}throw Error('Native boot failed '+logs.slice(-1200));}
    async function stop(){if(child&&child.exitCode===null){const done=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await done;}}
@@ -43,6 +43,7 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
     await page.locator(game.button).waitFor();const responsePromise=page.waitForResponse(r=>r.url().endsWith(game.spin)&&r.request().method()==='POST');await page.locator(game.button).click({timeout:30000});const response=await responsePromise;assert.equal(response.status(),200,await response.text());const result=await response.json(),payload=JSON.parse(response.request().postData());
     const payout=Number(game.python?result.win_virtual_credits:result.payout),stake=Number(game.python?result.stake_virtual_credits:result.cost),initialExpected=1000-stake+payout;let expected=initialExpected,expectedRounds=1;
     assert.equal(Number(result.state.balance),expected);
+    const {studioRelease,rollbackStudio,closeStudio}=await require('./agency-studio-native.cjs')({pool,ok,req,creds,password,base,browser,game});
     await page.goto('about:blank');await stop();await start();await page.goto(host+game.route);
     if(game.python)await page.waitForFunction(()=>window.MahjongStudioRuntime?.manifest);else await page.waitForFunction(()=>window.SlotGameTest&&window.SkygateAgency);
     if(game.python)await page.locator('#soft-tech-continue').click({timeout:30000});else await page.locator('#bootPlay').click({timeout:30000});
@@ -51,6 +52,7 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
       for(const mode of ['buy','ante']){
         await page.waitForFunction(()=>!window.SlotGameTest.getState().busy);
         const received=page.waitForResponse(r=>r.url().endsWith(game.spin)&&r.request().method()==='POST');
+        received.catch(()=>{}); // Report a control failure without an unhandled timeout.
         if(mode==='buy'){await page.locator('#buyFeature').click();await page.locator('#confirmBuy').click();}
         else{await page.locator('#anteFeature').click();await page.locator('#spin').click();}
         const response=await received;assert.equal(response.status(),200,await response.text());const next=await response.json();
@@ -66,6 +68,9 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
     await page.locator('#agency-return').click();await page.waitForURL(front+'/');await page.locator('#main').waitFor();releaseResponse();await page.unroute(host+game.spin);
     await page.goto(front+'/user');await page.locator('form[data-form="profile"]').waitFor();
     const afterLeave=await page.evaluate(()=>fetch('/api/player/wallet').then(r=>r.json()));assert.equal(Number(afterLeave.balances.find(b=>b.code.endsWith(':available')).amount),expected);
+    if(game.python)assert.equal(leavingResult.state.manifest.presentation.animation_speed,1.1);
+    else assert.equal(leavingResult.state.release_id,studioRelease);
+    await rollbackStudio();await closeStudio();
     // Expiry blocks a new spin but retains the canonical return path and history.
     await pool.query("UPDATE agency_launches SET expires_at=now()-interval '1 second' WHERE tenant_id=$1 AND player_id=$2",[cor.id,p.id]);
     await page.goto(host+game.route);await page.waitForFunction(()=>window.PlaygroundNavigation&&!window.PlaygroundNavigation.canStart());
@@ -78,7 +83,7 @@ module.exports=async({pool,check,player,A,topup,paid,fund,password,ok,base,gameS
     fs.mkdirSync(path.join(__dirname,'../test-results'),{recursive:true});await page.screenshot({path:path.join(__dirname,'../test-results/'+game.slug+'-native.png')});
     await page.locator('#agency-return').click();await page.waitForURL(front+'/');await page.locator('#main').waitFor();
     await page.goto(front+'/user');await page.locator('form[data-form="profile"]').waitFor();const wallet=await page.evaluate(()=>fetch('/api/player/wallet').then(r=>r.json()));assert.equal(Number(wallet.balances.find(b=>b.code.endsWith(':available')).amount),expected);
-    return {environment:'isolated sandbox',storefrontLaunchAndReturn:true,browser:'Chromium 393x852',restart:true,returnButton:true,unknownResponseThenLeave:true,expiredSessionGuidance:true,settledRounds:expectedRounds,settlementJournalsPerRound:1,ledgerDifferences:0,productionContacted:false};
+    return {environment:'isolated sandbox',storefrontLaunchAndReturn:true,browser:'Chromium 393x852',restart:true,studioPublication:true,studioRollback:true,publicationSurvivesRestart:true,returnButton:true,unknownResponseThenLeave:true,expiredSessionGuidance:true,settledRounds:expectedRounds,settlementJournalsPerRound:1,ledgerDifferences:0,productionContacted:false};
    }catch(e){fs.writeFileSync('/tmp/'+game.slug+'-uat.log',logs);throw e;}
    finally{if(storefront)await new Promise(r=>storefront.close(r));if(browser)await browser.close();await stop();fs.rmSync(tmp,{recursive:true,force:true});}
   });

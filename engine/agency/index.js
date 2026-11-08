@@ -32,6 +32,7 @@ const { createAuth, wrap } = require("./auth");
 const { createCashier, tx } = require("./cashier");
 const { createBilling } = require("./billing");
 const { createGames } = require("./games");
+const { createStudio } = require("./studio");
 function createAgency({
   pool,
   security,
@@ -46,6 +47,7 @@ function createAgency({
   const auth = createAuth({ pool, master, production }),
     billing = createBilling({ pool }),
     games = createGames({ pool, gameKeys, publicOrigin, checkMaintenance: (db,t)=>auth.maintenance?.(db,t) });
+  const studio = createStudio({pool,security,throttle:auth.throttle});
   function payload(p) {
     const { approval_token, password, code, ...rest } = p || {};
     return rest;
@@ -257,8 +259,10 @@ function createAgency({
       "INSERT INTO agency_game_releases(game_id) SELECT id FROM gameops_games ON CONFLICT DO NOTHING",
     );
     await auth.init();
+    await studio.init();
   }
   function mount(app) {
+    studio.mount(app);
     // Public registration is deliberately registered before the authenticated player prefix.
     app.post(
       "/api/player/auth/register",
@@ -1260,6 +1264,7 @@ function createAgency({
       ["reserve", games.reserve],
       ["settle", games.settle],
       ["void", (p, s) => games.settle(p, s, true)],
+      ["studio-sync", studio.sync],
     ])
       app.post(
         "/api/v4/agency-game/" + action,

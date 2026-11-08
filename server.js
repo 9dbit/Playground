@@ -74,12 +74,13 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
-  const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?'https://chatvice.app':'';
+  const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents','/native-studio'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?'https://chatvice.app':'';
   if(widgetOrigin)res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${widgetOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${widgetOrigin} https://playground-agent-frontend-production.up.railway.app data: blob:; connect-src 'self' ${widgetOrigin} ${widgetOrigin.replace(/^https:/,'wss:')}; frame-src ${widgetOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
   if(req.path.replace(/\/$/,'')==='/agency'&&!widgetOrigin)res.setHeader('Content-Security-Policy',res.getHeader('Content-Security-Policy').replace("img-src 'self'","img-src 'self' https://chatvice.app https://playground-agent-frontend-production.up.railway.app"));
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
+app.use('/api/admin/agency/studio/:game/packages', express.json({ limit: '35mb', verify: (req,res,b)=>{req.rawBody=Buffer.from(b);} }));
 app.use(express.json({ limit: '800kb', verify: (req, res, b) => { req.rawBody = Buffer.from(b); } }));
 const ddl = `
 CREATE TABLE IF NOT EXISTS gameops_games (
@@ -138,13 +139,14 @@ app.use("/api/player", require("./engine/agency/storefront").bindTenant(pool));
 security.mount(app);
 app.get('/', (req, res) => res.redirect('/engine'));
 app.get('/engine', security.protectedPage('control.html'));
+app.get('/native-studio', security.protectedPage('native-studio.html'));
 app.get('/integrations', security.protectedPage('bridge.html'));
 app.get('/data', security.protectedPage('data.html'));
 app.get('/wallet',security.protectedPage('wallet.html'));
 app.get('/engine-v1', security.protectedPage('engine.html'));
 app.get('/preview', security.protectedPage('preview.html'));
 for (const filename of ['control.js','engine.js','bridge-ui.js','bridge-nav.js','data-ui.js','data-nav.js','wallet-ui.js']) app.get('/assets/' + filename, security.authenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
-for (const filename of ['platform-navigation.js','platform-navigation.css','control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
+for (const filename of ['native-studio.js','native-studio.css','platform-navigation.js','platform-navigation.css','control.css','parity.css','admin-ops.css','engine.css','bridge.css','data.css']) app.get('/assets/' + filename, (req, res) => res.sendFile(path.join(__dirname, 'public', filename)));
 app.use('/api/admin', ...security.adminAuth);
 app.get('/api/admin/summary', route(async (req, res) => {
   const [g,p,r,ev] = await Promise.all([

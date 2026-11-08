@@ -47,6 +47,7 @@ const MASTER_MENUS = [
   [
     "Manage Games",
     [
+      ["Rilis Studio", "/native-studio"],
       [
         "Games",
         "/engine#/games"

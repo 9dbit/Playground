@@ -260,7 +260,10 @@ async function main() {
     "INSERT INTO gameops_admin_sessions(admin_id,token_hash,auth_version,mfa_verified,expires_at) VALUES($1,$2,1,true,now()+interval '1 hour')",
     [owner.id, C.sha(raw)],
   );
+  const masterMfa=C.base32(crypto.randomBytes(20));
+  await pool.query("UPDATE gameops_admin_accounts SET mfa_secret=$2 WHERE id=$1",[owner.id,C.encryption(secret).seal(masterMfa,owner.id)]);
   creds.set("master", {
+    mfa:masterMfa,
     id: owner.id,
     cookie: "gameops_session=" + raw,
     csrf: crypto
@@ -332,6 +335,8 @@ async function main() {
         (await req("/api/admin/games", "GET", undefined, "ownerA")).status,
         401,
       );
+      assert.equal((await req('/api/admin/agency/studio/mahjong-wild','GET',undefined,'ownerA')).status,401);
+      assert.equal((await req('/api/admin/agency/studio/mahjong-wild/packages','POST',{},'ownerA')).status,401);
       const w = await ok("/api/player/wallet", "GET", undefined, "playerB");
       assert.ok(w.transactions.every((x) => x.tenant_id === B.id));
       return { crossTenant: 404, masterApi: 401 };
@@ -1468,7 +1473,7 @@ async function main() {
   await require("./agency-activation.cjs")({pool,req,ok,check,staff,player,topup,paid,A,B,PA,PB,creds,password,base,runtime});
   await require("./agency-adapter.cjs")({pool,runtime,check,player,A,B,topup,paid,ok,base,gameSecret});
   await require("./agency-native-release.cjs")({pool,check,runtime,A});
-  await require("./agency-native-slots.cjs")({pool,check,player,A,topup,paid,fund,password,ok,base,gameSecret});
+  await require("./agency-native-slots.cjs")({pool,check,player,A,topup,paid,fund,password,ok,req,creds,base,gameSecret});
   await require("./agency-native-uno.cjs")({pool,check,player,A,topup,paid,fund,password,ok,base,gameSecret});
   await require("./agency-email.cjs")({pool,runtime,check,player,A,password,req});
   if (process.env.AGENCY_BROWSER === "true")
@@ -1680,7 +1685,7 @@ async function main() {
               await cor.locator('[name="amount"]').fill('50000');
               await cor.locator('form[data-form="transaction"] [type="submit"]').click();
               await cor.getByRole('dialog',{name:'Detail transaksi'}).waitFor();
-              assert.ok((await pool.query("SELECT id FROM agency_transactions WHERE tenant_id=(SELECT id FROM agency_tenants WHERE slug='64cor')")).rowCount===1);
+              assert.equal((await pool.query("SELECT t.id FROM agency_transactions t JOIN agency_players p ON p.id=t.player_id AND p.tenant_id=t.tenant_id WHERE t.tenant_id=(SELECT id FROM agency_tenants WHERE slug='64cor') AND p.username='cor_test'")).rowCount,1);
               await cor.reload();
               await cor.getByRole('button',{name:'Detail',exact:true}).first().waitFor();
               const tenant=(await pool.query("SELECT id FROM agency_tenants WHERE slug='64cor'")).rows[0];

@@ -62,7 +62,7 @@
   }
   // Master support is available independently of the selected agency.
   // Credential/setup pages deliberately do not include this loader.
-  const masterPaths = ["/engine", "/engine-v1", "/integrations", "/data", "/wallet", "/agents"];
+  const masterPaths = ["/engine", "/engine-v1", "/integrations", "/data", "/wallet", "/agents", "/native-studio"];
   if (masterPaths.includes(location.pathname.replace(/\/$/, ""))) {
     fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)

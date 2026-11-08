@@ -103,7 +103,7 @@ async function dashboard(){const [d,s,g,network]=await Promise.all([api(apiBase+
 }
 async function games(){const q=await api(apiBase+'deep/games');
  return heading('Manage Games','Catalog, demo-only configuration, artwork and game log','','<button class="btn" data-action="game-create">+ Add Game</button>')+
- notice('Game status here is catalog metadata; it does not remotely pause or configure the separate game engines.')+
+ notice('Publikasi konfigurasi runtime Mahjong dan Skygate tersedia di Rilis Studio. Pengaturan demo di tabel ini tetap terpisah.')+'<a class="btn" href="/native-studio">Rilis Studio Mahjong & Skygate</a>'+
  table(['Name','Status','Featured','Trending','Rounds','Game Log','Action'],q.items.map(x=>[link(x.name,'game/'+x.id),badge(x.status),badge(x.featured),badge(x.trending),E(x.rounds),link('View Log','game-rounds/'+x.id),link('Edit / Details →','game/'+x.id)]));
 }
 async function game(id){const data=await api(apiBase+'deep/games/'+id);const g=data.item;
