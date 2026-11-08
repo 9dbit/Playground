@@ -1,0 +1,64 @@
+{
+  "scope": "Studio production export deployment",
+  "checks": [
+    {
+      "game": "Mahjong",
+      "health": "ok",
+      "worker_ready": true,
+      "storage": "postgresql",
+      "engine_sha256": "08bde22d157336872cdcfa4aaa77d3f056db150dfc0e432bdfaaf2275935ea8d",
+      "studio_http": 200,
+      "export_action_in_deployed_bundle": true,
+      "export_requires_login": true
+    },
+    {
+      "game": "Skygate",
+      "health": "ok",
+      "studio_http": 200,
+      "export_button_served": true,
+      "publisher_matches_tested_source": true,
+      "publisher_sha256": "50387e333a1f77f988e74c879e3ae70b7f8b14d4b34f38db286bc8da4f1b173b",
+      "source": "701e88fb281c08fced1b89e221cbbe21751e2ebc"
+    }
+  ],
+  "no_game_publication_or_transactions": true,
+  "deployment_status": "All three original Studio services SUCCESS",
+  "browser_checks": [
+    {
+      "game": "Skygate",
+      "studioHttp": 200,
+      "actualExportDownload": true,
+      "packageFormat": "playground.studio.v1",
+      "nativeSchemaValid": true,
+      "mobileWidth": 393
+    },
+    {
+      "game": "Mahjong",
+      "studioHttp": 200,
+      "exportButtonInDeployedBundle": true,
+      "anonymousExportStatus": 401,
+      "actualAuthenticatedExport": "covered by passing CI; production login not changed",
+      "workerReady": true,
+      "storage": "postgresql"
+    }
+  ],
+  "sky_export_loading_fix": {
+    "source": "701e88fb281c08fced1b89e221cbbe21751e2ebc",
+    "unit_tests_passed": 120,
+    "behavior": "Export button disabled while release operations are loading; enabled when ready"
+  },
+  "final_skygate_deployment": {
+    "id": "ae524e93-59f8-42c6-b980-7d35b224ec31",
+    "source": "701e88fb281c08fced1b89e221cbbe21751e2ebc",
+    "status": "SUCCESS",
+    "ci": "All three workflows passed"
+  },
+  "final_skygate_browser": {
+    "game": "Skygate",
+    "studioHttp": 200,
+    "actualExportDownload": true,
+    "packageFormat": "playground.studio.v1",
+    "nativeSchemaValid": true,
+    "mobileWidth": 393
+  }
+}

@@ -36,7 +36,7 @@ Tests use disposable synthetic-credit databases. Published evidence contains no 
 
 Enable `AGENCY_STUDIO_SYNC=1` only on the existing Mahjong and Skygate agency sandbox services after the backend has this route. Keep persistent volumes and one replica. The worker contacts Playground over the existing authenticated native transport. Health reports expose only sync enabled/time/error metadata.
 
-The original master/Studio production services and main branches are not changed. Source Studio export buttons are included in the native feature PRs; the original Studio production deployments require their own release. The deployed master panel's built-in controls and package upload are usable independently of those export buttons.
+The original master production service and main branches remain unchanged. Following the user's additional deployment instruction, the original Mahjong web/worker and Skygate Studio services now expose their Playground export actions. The deployed master controls and package upload remain available independently.
 
 This is not live wagering/RTP certification. Native PostgreSQL load certification and real payment/email/SMS/KYC/OAuth provider setup remain separate from this sandbox publication path.
 
@@ -55,3 +55,23 @@ Local integration evidence: [native-studio-local-2026-11-08.json](evidence/nativ
 Deployed zero-coin smoke also passes: 64COR registration → launch → native redeem → context/state for both games, catalog release SHA equals the running source, balance/reserved remain zero, and the canonical return address is 64COR. The existing UNO launch/key still works. No paid rounds or funds transfers were performed on deployed services. Evidence: [native-studio-deployed-2026-11-08.json](evidence/native-studio-deployed-2026-11-08.json).
 
 CI records: [Mahjong engine/browser/Studio](https://github.com/9dbit/Mahjong-legend/actions/runs/42464368122), [Skygate QA](https://github.com/9dbit/Skygate/actions/runs/42464378241), [Skygate audio](https://github.com/9dbit/Skygate/actions/runs/42464378279), [Skygate iPhone viewport](https://github.com/9dbit/Skygate/actions/runs/42464378212).
+
+## Original Studio production rollout — 8 November 2026
+
+The user authorized this additional rollout after the sandbox milestone. Existing production services were deployed directly from the CI-passing feature commits; no merge to main was performed. Railway source is pinned to these commits, so a subsequent source release must explicitly update the pin. Existing storage/authentication settings were retained and agency mode was not enabled on the original Studio services.
+
+| Service | Commit | Deployment | Result |
+|---|---|---|---|
+| Mahjong web | `d75ea42af04bbd027fecc64408f7cb52d1d4cfdf` | `5207789c-d951-46bc-83e9-baebd74088bf` | SUCCESS |
+| Mahjong worker | `d75ea42af04bbd027fecc64408f7cb52d1d4cfdf` | `ede5e946-fff0-45c5-9ea5-8d336af53bd0` | SUCCESS |
+| Skygate web | `701e88fb281c08fced1b89e221cbbe21751e2ebc` | `ae524e93-59f8-42c6-b980-7d35b224ec31` | SUCCESS |
+
+[Mahjong Studio](https://mahjong-legend-web-production.up.railway.app/studio/): the built UI includes **Export Playground** in release history for publishers. The new export endpoint rejects anonymous access. Health confirms PostgreSQL and a ready worker, with the same engine hash as before deployment.
+
+[Skygate Studio](https://skygate-web-production.up.railway.app/studio/): **Preview & Publish → Export paket Playground** is served. Its publisher script matches the tested repository bytes.
+
+No game configuration was published and no player transaction was performed during these deployment checks.
+
+Chromium at 393 px successfully clicked the deployed Skygate export action, downloaded the JSON package, and validated it with the native project validator. Mahjong's production export endpoint remains publisher-authenticated; authenticated export behavior is covered by the passing Studio API CI rather than changing production credentials. A follow-up Skygate fix disables the export button during a pending release request so early clicks cannot be silently ignored; its download/no-publication regression test is included in the 120 passing Node tests.
+
+The final Skygate loading-state fix is deployed as `701e88fb281c08fced1b89e221cbbe21751e2ebc` with terminal SUCCESS. All three checks passed: [general QA](https://github.com/9dbit/Skygate/actions/runs/42466796278), [audio](https://github.com/9dbit/Skygate/actions/runs/42466796276), [iPhone viewport](https://github.com/9dbit/Skygate/actions/runs/42466796312). The agency sandbox remains on its already-verified runtime commit because this follow-up only changes the standalone Studio publisher UI.
