@@ -320,43 +320,99 @@ const MASTER_MENUS = [
 ];
 (() => {
   'use strict';
-  // MASTER_MENUS is generated from the master route inventory below.
-  const ownAgent = location.pathname === '/agency';
-  const agencyPage = ownAgent || location.pathname === '/agents';
+  const path = location.pathname.replace(/\/$/, '');
+  const ownAgent = path === '/agency';
+  const agencyPage = ownAgent || path === '/agents';
   let dialog;
-  const button = (text, tag='button') => { const el=document.createElement(tag); el.className='pg-nav-button';el.textContent=text;if(tag==='button')el.type='button';return el; };
+  const button = (text, tag = 'button') => {
+    const el = document.createElement(tag);
+    el.className = 'pg-nav-button';
+    el.textContent = text;
+    if (tag === 'button') el.type = 'button';
+    return el;
+  };
+  const selectedName = () => document.querySelector('#tenant-select option:checked')?.textContent || document.querySelector('.workspace .eyebrow')?.textContent || 'Agen';
+  const localURL = hash => path + location.search + '#' + hash;
   function menu() {
-    if (!dialog) { dialog=document.createElement('dialog');dialog.id='pg-main-menu';document.body.append(dialog); }
+    if (!dialog) {
+      dialog = document.createElement('dialog');
+      dialog.id = 'pg-main-menu';
+      dialog.setAttribute('aria-labelledby', 'pg-menu-title');
+      dialog.addEventListener('close', () => document.querySelector('[data-pg-menu]')?.focus());
+      document.body.append(dialog);
+    }
     dialog.replaceChildren();
-    const head=document.createElement('div');head.className='pg-menu-head';
-    const title=document.createElement('h2');title.textContent=ownAgent?'Menu agen':'Menu utama Playground';
-    const close=button('Tutup');close.onclick=()=>dialog.close();head.append(title,close);dialog.append(head);
-    const note=document.createElement('p');note.textContent=ownAgent?'Akses sesuai peran dan agen Anda.':'Operasional agen berada di Platform Agen. Menu GameOps memakai data sumber/legacy yang terpisah.';dialog.append(note);
-    const groups=ownAgent?[]:MASTER_MENUS;
-    if(agencyPage)groups.unshift(['Agen terpilih',Array.from(document.querySelectorAll('.sidebar [data-view]')).map(a=>[a.textContent,location.pathname+location.search+a.getAttribute('href')])]);
-    const grid=document.createElement('div');grid.className='pg-menu-grid';
-    const deferred=href=>/\/players\/(email|mobile|kyc|kyc-pending)$|\/subscribers$|\/extra\/(cache|update)$|\/content\/(template|frontend)$|\/setting\/(configuration|notification|kyc|social|language|extensions|gdpr|css)$/.test(href);
-    const technical=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Rancangan teknis / belum aktif';technical.append(summary);
-    for(const [name,items] of groups){const section=document.createElement('section');const h=document.createElement('h3');h.textContent=name;section.append(h);
-      for(const [label,href] of items){const a=document.createElement('a');a.href=href;a.textContent=label;a.onclick=()=>dialog.close();if(deferred(href)){technical.append(a);}else section.append(a);}grid.append(section);}
-    if(!ownAgent && agencyPage)groups.shift();
-    if(ownAgent && document.getElementById('logout')){const out=button('Keluar');out.onclick=()=>{dialog.close();document.getElementById('logout').click();};grid.append(out);}
-    dialog.append(grid);if(technical.children.length>1)dialog.append(technical);dialog.showModal();
+    const head = document.createElement('div'); head.className = 'pg-menu-head';
+    const title = document.createElement('h2'); title.id = 'pg-menu-title';
+    title.textContent = ownAgent ? 'Menu agen' : 'Menu utama Playground';
+    const close = button('Tutup'); close.onclick = () => dialog.close();
+    head.append(title, close); dialog.append(head);
+    const note = document.createElement('p');
+    note.textContent = agencyPage ? `${ownAgent ? 'Panel agen' : 'Panel master'} · ${selectedName()}. Menu mengikuti hak akses akun.` : 'Panel master Playground';
+    dialog.append(note);
+    // Do not mutate the shared inventory when opening or closing the menu.
+    const groups = ownAgent ? [] : [...MASTER_MENUS];
+    if (agencyPage) groups.unshift([selectedName(), Array.from(document.querySelectorAll('.sidebar [data-view]')).map(a => [a.textContent, localURL(a.dataset.view)])]);
+    const grid = document.createElement('div'); grid.className = 'pg-menu-grid';
+    const deferred = href => /\/players\/(email|mobile|kyc|kyc-pending)$|\/subscribers$|\/extra\/(cache|update)$|\/content\/(template|frontend)$|\/setting\/(configuration|notification|kyc|social|language|extensions|gdpr|css)$/.test(href);
+    const technical = document.createElement('details'), summary = document.createElement('summary');
+    summary.textContent = 'Rancangan teknis / belum aktif'; technical.append(summary);
+    for (const [name, items] of groups) {
+      const section = document.createElement('section'), h = document.createElement('h3');
+      h.textContent = name; section.append(h);
+      for (const [label, href] of items) {
+        const a = document.createElement('a'); a.href = href; a.textContent = label;
+        const target = new URL(href, location.origin);
+        if (target.pathname === path && target.search === location.search && target.hash === (location.hash || '#overview')) a.setAttribute('aria-current', 'page');
+        a.onclick = () => dialog.close();
+        if (deferred(href)) technical.append(a); else section.append(a);
+      }
+      if (section.children.length > 1) grid.append(section);
+    }
+    if (ownAgent && document.getElementById('logout')) {
+      const out = button('Keluar'); out.onclick = () => { dialog.close(); document.getElementById('logout').click(); }; grid.append(out);
+    }
+    dialog.append(grid);
+    if (technical.children.length > 1) dialog.append(technical);
+    dialog.showModal();
   }
-  function attach(){
-    if(ownAgent&&!document.querySelector('.sidebar [data-view]'))return;
-    let parent,after;
-    if(document.querySelector('.workspace .topbar')){parent=document.querySelector('.workspace');after=null;}
-    else if(document.querySelector('.content-wrap .topbar')){parent=document.querySelector('.content-wrap');after=parent.querySelector('.topbar');}
-    else if(document.querySelector('.main > header.top')){parent=document.querySelector('.main');after=parent.querySelector('header.top');}
-    else if(document.querySelector('body > header')){parent=document.body;after=document.querySelector('body > header');}
+  function update(bar) {
+    const hash = location.hash.slice(1) || 'overview';
+    const root = agencyPage && hash === (ownAgent ? 'overview' : 'network');
+    const back = bar.querySelector('[data-pg-back]');
+    const home = document.querySelector('.sidebar [data-view=overview]')?.dataset.view || document.querySelector('.sidebar [data-view]')?.dataset.view || 'overview';
+    const href = ownAgent ? localURL(home) : agencyPage && !root ? localURL('network') : '/engine#/dashboard';
+    const label = ownAgent ? (home === 'overview' ? '← Ringkasan agen' : '← Beranda agen') : agencyPage && !root ? '← Semua agen' : '← Dashboard master';
+    if (back.getAttribute('href') !== href) back.setAttribute('href', href);
+    if (back.textContent !== label) back.textContent = label;
+    const crumb = bar.querySelector('.pg-panel-context');
+    const page = document.querySelector('#page-title')?.textContent;
+    const context = agencyPage ? `${ownAgent ? 'Panel agen' : 'Panel master'} / ${!ownAgent && hash === 'network' ? 'Semua agen' : selectedName() + (page ? ' / ' + page : '')}` : 'Panel master Playground';
+    if (crumb.textContent !== context) crumb.textContent = context;
+  }
+  function attach() {
+    // Never expose a master menu on the agent login or enrollment screen.
+    if (agencyPage && !document.querySelector('.sidebar [data-view]')) return;
+    let parent, after;
+    if (document.querySelector('.workspace .topbar')) parent = document.querySelector('.workspace');
+    else if (document.querySelector('.content-wrap .topbar')) { parent = document.querySelector('.content-wrap'); after = parent.querySelector('.topbar'); }
+    else if (document.querySelector('.main > header.top')) { parent = document.querySelector('.main'); after = parent.querySelector('header.top'); }
+    else if (document.querySelector('body > header')) { parent = document.body; after = document.querySelector('body > header'); }
     else return;
-    if(parent.querySelector(':scope > .pg-navigation'))return;
-    const bar=document.createElement('nav');bar.className='pg-navigation';bar.setAttribute('aria-label','Navigasi Playground');
-    const back=button('← Kembali','a');back.href=ownAgent?location.pathname+location.search+'#overview':'/engine';back.setAttribute('aria-label',ownAgent?'Kembali ke ringkasan agen':'Kembali ke master Playground');
-    const main=button('☰ Menu utama');main.onclick=menu;main.setAttribute('aria-haspopup','dialog');bar.append(back,main);
-    if(!ownAgent){const agents=button('Platform Agen','a');agents.href='/agents';bar.append(agents);}
-    if(after)after.after(bar);else parent.prepend(bar);
+    const existing = parent.querySelector(':scope > .pg-navigation');
+    if (existing) { update(existing); return; }
+    const bar = document.createElement('nav'); bar.className = 'pg-navigation'; bar.setAttribute('aria-label', 'Navigasi Playground');
+    const back = button('', 'a'); back.dataset.pgBack = '';
+    const main = button('☰ Menu utama'); main.dataset.pgMenu = ''; main.onclick = menu;
+    main.setAttribute('aria-haspopup', 'dialog'); main.setAttribute('aria-controls', 'pg-main-menu');
+    bar.append(back, main);
+    if (!ownAgent) { const agents = button('Platform Agen', 'a'); agents.href = '/agents#network'; bar.append(agents); }
+    const crumb = document.createElement('p'); crumb.className = 'pg-panel-context'; bar.append(crumb);
+    if (after) after.after(bar); else parent.prepend(bar);
+    update(bar);
+    if (agencyPage) document.querySelector('.shell')?.classList.add('pg-navigation-ready');
   }
-  new MutationObserver(attach).observe(document.body,{childList:true,subtree:true});attach();
+  new MutationObserver(attach).observe(document.body, { childList: true, subtree: true });
+  addEventListener('hashchange', attach);
+  attach();
 })();

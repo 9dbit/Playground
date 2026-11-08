@@ -42,6 +42,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
+      - run: node tests/panel-navigation-ui.cjs
       - run: node tests/security-ui.cjs
       - run: node tests/bridge-ui.cjs
       - run: node tests/parity-ui.cjs

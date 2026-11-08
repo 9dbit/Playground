@@ -21,7 +21,7 @@
     }
   };
   const date = (x) => (x ? new Date(x).toLocaleString("id-ID") : "—");
-  const master = location.pathname === "/agents";
+  const master = location.pathname.replace(/\/$/, "") === "/agents";
   let me,
     tenant = new URLSearchParams(location.search).get("tenant_id") || "",
     tenants = [],
@@ -271,10 +271,15 @@
       tenants = (await request("/api/admin/agency/tenants")).items;
       if (!tenants.some((x) => x.id === tenant)) tenant = tenants[0]?.id || "";
     } else tenant = me.tenant.id;
+    if (master && tenant) {
+      const current = new URL(location.href);
+      current.searchParams.set("tenant_id", tenant);
+      history.replaceState(null, "", current);
+    }
     base = master ? "/api/admin/agency/tenants/" + tenant : "/api/agency";
     const selected = master ? tenants.find((x) => x.id === tenant) : me.tenant;
     $("#app").innerHTML =
-      `<div class="shell"><aside class="sidebar"><a class="brand" href="${master ? "/engine" : "/agency"}">PLAYGROUND<span class="muted"> / ${master ? "MASTER" : "AGEN"}</span></a>${master ? `<select id="tenant-select" aria-label="Pilih agen">${tenants.map((t) => `<option value="${t.id}" ${t.id === tenant ? "selected" : ""}>${E(t.name)}</option>`).join("")}</select><button id="new-tenant" class="secondary small" style="margin-top:10px">+ Agen baru</button>` : `<p><strong>${E(selected?.name)}</strong><br><small>${E(me.display_name)} · ${E(me.role)}</small></p>`}<nav>${nav
+      `<div class="shell"><aside class="sidebar"><a class="brand" href="${master ? "/engine" : "/agency"}">PLAYGROUND<span class="muted"> / ${master ? "MASTER" : "AGEN"}</span></a>${master ? `<select id="tenant-select" aria-label="Pilih agen">${tenants.map((t) => `<option value="${t.id}" ${t.id === tenant ? "selected" : ""}>${E(t.name)}</option>`).join("")}</select><button id="new-tenant" class="secondary small" style="margin-top:10px">+ Agen baru</button>` : `<p><strong>${E(selected?.name)}</strong><br><small>${E(me.display_name)} · ${E(me.role)}</small></p>`}<nav aria-label="Menu dashboard">${nav
         .filter((x) => can(x[2]))
         .map((x) => `<a href="#${x[0]}" data-view="${x[0]}">${E(x[1])}</a>`)
         .join(
@@ -388,11 +393,20 @@
         '<div class="card empty">Buat agen pertama untuk mulai konfigurasi dan simulasi.</div>';
       return;
     }
-    document
-      .querySelectorAll("[data-view]")
-      .forEach((a) => a.classList.toggle("active", a.dataset.view === view));
+    const accessible = nav.filter(x => can(x[2]));
+    if (!accessible.some(x => x[0] === view)) {
+      view = accessible.some(x => x[0] === "overview") ? "overview" : accessible[0]?.[0];
+      if (!view) { $("#body").textContent = "Akun ini belum memiliki akses menu. Hubungi administrator."; return; }
+      history.replaceState(null, "", location.pathname + location.search + "#" + view);
+    }
+    document.querySelectorAll(".sidebar [data-view]").forEach(a => {
+      const active = a.dataset.view === view;
+      a.classList.toggle("active", active);
+      if (active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
     $("#page-title").textContent =
       nav.find((x) => x[0] === view)?.[1] || "Ringkasan";
+    document.title = `${$("#page-title").textContent} · ${master ? "Master" : "Agen"} · Playground`;
     const b = $("#body");
     b.innerHTML = '<p class="loading">Memuat…</p>';
     try {
