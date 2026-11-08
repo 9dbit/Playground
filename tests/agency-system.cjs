@@ -1486,7 +1486,7 @@ async function main() {
           for (const privatePath of ["/security", "/agency"]) {
             const response = await page.goto(base + privatePath);
             assert.equal(await page.locator("#playground-chatvice-script").count(), 0);
-            assert.doesNotMatch(response.headers()["content-security-policy"], /chatvice\.app/);
+            assert.doesNotMatch(response.headers()["content-security-policy"], /script-src[^;]*chatvice\.app/);
           }
           const anonymous = await browser.newPage();
           await anonymous.goto(base + "/engine");
@@ -1527,6 +1527,14 @@ async function main() {
           const editor = await agentContext.newPage();
           editor.on("pageerror", e => errors.push(e.message));
           await editor.goto(base + "/agency#website");
+          const signup = editor.locator('#playground-chatvice-signup');
+          await signup.waitFor();
+          assert.equal(await signup.getAttribute('href'), 'https://chatvice.app');
+          assert.equal(await signup.evaluate(el => getComputedStyle(el).borderRadius), '50%');
+          assert.equal(await signup.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
+          await editor.evaluate(() => dispatchEvent(new CustomEvent('agency:help-context', {detail: {origin:'https://tawk.to',merchant:'foreign'}})));
+          assert.equal(await editor.locator('#playground-chatvice-script').count(), 0);
+          assert.equal(await signup.count(), 1);
           const row = editor.locator("tbody tr").filter({has: editor.getByRole("cell", {name: "banner-qa", exact: true})});
           const sharp = require("sharp");
           for (const color of ["#2299dd", "#ee9933"]) {

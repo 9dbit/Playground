@@ -40,7 +40,7 @@ const bridge = createBridge({ pool });
 const wallet=sourceWallet.createWallet({pool});
 const publicOrigin=process.env.PUBLIC_SITE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN?'https://'+process.env.RAILWAY_PUBLIC_DOMAIN:'http://localhost:'+PORT);
 const chatvice={origin:process.env.AGENCY_CHATVICE_ORIGIN||'',masterMerchant:process.env.AGENCY_CHATVICE_MASTER_MERCHANT||'',tenants:JSON.parse(process.env.AGENCY_CHATVICE_TENANT_MERCHANTS||'{}')};
-if(chatvice.origin){if(new URL(chatvice.origin).protocol!=='https:')throw new Error('Chatvice requires HTTPS');chatvice.origin=new URL(chatvice.origin).origin;}
+if(chatvice.origin){if(new URL(chatvice.origin).origin!=='https://chatvice.app')throw new Error('Only the official Chatvice origin is supported');chatvice.origin=new URL(chatvice.origin).origin;}
 const agency=createAgency({pool,security,master:SESSION_SECRET,publicDir:path.join(__dirname,'public'),production:PRODUCTION,
  gameKeys:JSON.parse(process.env.AGENCY_GAME_KEYS||'[]'),simulationWorker:process.env.AGENCY_SIMULATION_WORKER==='true',chatvice});
 const agencyContent=createAgencyContent({pool,agency,publicOrigin,chatvice});
@@ -73,7 +73,7 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   const widgetOrigin=['/engine','/engine-v1','/integrations','/data','/wallet','/agents'].includes(req.path.replace(/\/$/,''))?'https://chatvice.app':req.path.replace(/\/$/,'')==='/agency'?chatvice.origin:'';
   if(widgetOrigin)res.setHeader('Content-Security-Policy',`default-src 'self'; script-src 'self' ${widgetOrigin}; style-src 'self' 'unsafe-inline'; img-src 'self' ${widgetOrigin} https://playground-agent-frontend-production.up.railway.app data: blob:; connect-src 'self' ${widgetOrigin} ${widgetOrigin.replace(/^https:/,'wss:')}; frame-src ${widgetOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
-  if(req.path.replace(/\/$/,'')==='/agency'&&!widgetOrigin)res.setHeader('Content-Security-Policy',res.getHeader('Content-Security-Policy').replace("img-src 'self'","img-src 'self' https://playground-agent-frontend-production.up.railway.app"));
+  if(req.path.replace(/\/$/,'')==='/agency'&&!widgetOrigin)res.setHeader('Content-Security-Policy',res.getHeader('Content-Security-Policy').replace("img-src 'self'","img-src 'self' https://chatvice.app https://playground-agent-frontend-production.up.railway.app"));
   if (PRODUCTION) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });

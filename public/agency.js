@@ -819,7 +819,7 @@
           '<div class="card"><h2>Chatvice</h2><p>' +
           E(
             r.chatvice
-              ? "Panduan eksternal telah dikonfigurasi. Data transaksi privat tidak diteruskan ke widget."
+              ? "Chatvice telah dikonfigurasi sebagai partner chat Playground. Data transaksi privat tidak diteruskan ke widget."
               : "Merchant Chatvice belum dihubungkan. Gunakan panduan dan tiket dukungan.",
           ) +
           '</p><a href="#support">Buka tiket dukungan</a></div>';

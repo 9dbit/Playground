@@ -583,3 +583,7 @@ dialog footer {
 .banner-preview[hidden] { display: none; }
 .banner-editor .toolbar { flex-wrap: wrap; }
 .banner-status { overflow-wrap: anywhere; }
+
+#playground-chatvice-signup { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 10000; display: grid; place-items: center; width: 60px; height: 60px; padding: 12px; box-sizing: border-box; border-radius: 50%; background: #fff; box-shadow: 0 4px 24px #21104026; text-decoration: none; }
+#playground-chatvice-signup img { width: 100%; height: 100%; object-fit: contain; filter: brightness(0) saturate(100%) invert(32%) sepia(80%) saturate(2450%) hue-rotate(243deg) brightness(90%) contrast(95%); }
+#playground-chatvice-signup:focus-visible { outline: 3px solid #7950d8; outline-offset: 4px; }
