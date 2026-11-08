@@ -28,7 +28,7 @@ Bonus adalah grant koin tetap, **tanpa wagering, free spins, cashback, komisi re
 
 ## Batas yang belum selesai / belum aktif
 
-1. **UNO native wallet sandbox telah diimplementasikan, diuji dari storefront sampai game asli, dan deployed SUCCESS.** Detail dan deployment pada `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate masih memerlukan penggantian local ledger/client math serta UAT native; tetap Maintenance/registered. UNO belum diaktifkan untuk ekonomi live.
+1. **UNO native wallet sandbox telah diimplementasikan, diuji dari storefront sampai game asli, dan deployed SUCCESS.** Detail dan deployment pada `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate juga telah memiliki runtime wallet native, presisi eksplisit, pemulihan transaksi dan UAT browser 64COR; lihat `MAHJONG_SKYGATE_NATIVE_ACTIVATION_2026-11-08.md` untuk source dan deployment sandbox. UNO belum diaktifkan untuk ekonomi live.
 2. **Gateway pembayaran nyata belum diintegrasikan.** Belum ada provider/account/key di Railway. Seluruh cashier yang diuji tetap simulator; SHARED/SPLIT, approval, saldo dan reversal simulator tidak membuktikan UAT bank.
 3. **Email adapter siap dikonfigurasi, delivery nyata belum diuji.** Tidak ada secret/domain pengirim. Status accepted bukan delivered; receipts webhook belum tersedia.
 4. **SMS, KYC, Google/Apple OAuth belum diimplementasikan/diaktifkan.** Provider/account/callback dan aturan verifikasi belum dipilih. Tidak memberi badge Verified palsu.
@@ -47,4 +47,4 @@ Batas ini sengaja dicatat sebagai pekerjaan tersisa, bukan diganti dengan status
 
 ## Kelanjutan yang memerlukan input dan integrasi
 
-Playground menentukan provider merchant pembayaran dan credential sandbox; domain/email sender untuk aktivasi mail; spesifikasi KYC/SMS/OAuth bila digunakan. Untuk native games, tetapkan kontrak ekonomi dan satuan saldo dahulu, kemudian pasang adapter durable dalam tiap source, uji crash/retry lewat game asli dan deploy game sandbox terpisah. Tidak mengubah persentase payout atau memindahkan saldo lokal lama secara otomatis.
+Playground menentukan provider merchant pembayaran dan credential sandbox; domain/email sender untuk aktivasi mail; spesifikasi KYC/SMS/OAuth bila digunakan. Untuk live native games, evaluasi return efektif setelah pembulatan, ekonomi/risk pool dan kapasitas storage dahulu; integrasi durable dan sandbox tiga game sudah memiliki bukti UAT. Tidak mengubah persentase payout atau memindahkan saldo lokal lama secara otomatis.

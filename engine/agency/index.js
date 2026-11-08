@@ -358,6 +358,8 @@ function createAgency({
           ])
         ).rows[0];
         if (!registered) fail(404, "Game tidak ditemukan");
+        if (p.slug !== undefined && p.slug !== registered.slug)
+          fail(409, "Identitas game harus sesuai katalog terdaftar");
         if (
           ![
             "registered",

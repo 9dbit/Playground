@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-08",
+  "environment": "isolated sandbox",
+  "productionContacted": false,
+  "database": "PGlite",
+  "browser": "Chromium 393x852",
+  "checks": [
+    {
+      "id": "NATIVE_MAHJONG",
+      "status": "PASS",
+      "evidence": {
+        "environment": "isolated sandbox",
+        "storefrontLaunchAndReturn": true,
+        "browser": "Chromium 393x852",
+        "restart": true,
+        "settledRounds": 1,
+        "settlementJournalsPerRound": 1,
+        "ledgerDifferences": 0,
+        "productionContacted": false
+      }
+    },
+    {
+      "id": "NATIVE_SKYGATE",
+      "status": "PASS",
+      "evidence": {
+        "environment": "isolated sandbox",
+        "storefrontLaunchAndReturn": true,
+        "browser": "Chromium 393x852",
+        "restart": true,
+        "settledRounds": 3,
+        "settlementJournalsPerRound": 1,
+        "ledgerDifferences": 0,
+        "productionContacted": false
+      }
+    }
+  ],
+  "suitePassed": 40,
+  "suiteFailed": 0,
+  "nativeUnit": {
+    "mahjongPass": 34,
+    "skygatePass": 118
+  },
+  "backendUnit": {
+    "pass": 60,
+    "skip": 5
+  }
+}

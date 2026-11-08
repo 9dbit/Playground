@@ -1,0 +1,41 @@
+# Aktivasi native Mahjong dan Skygate — 8 November 2026
+
+## Hasil implementasi
+
+Mahjong Wild dan Skygate 5000 sekarang mempunyai runtime server native yang meluncur melalui token Playground dan menggunakan ledger pusat agen/player. Tidak ada saldo demo, reset wallet lokal atau payout yang dipercaya dari browser pada mode ini. UI/art/math asli dipertahankan; editor Studio dan service game semula tetap terpisah.
+
+| Game | Implementasi | Source | Draft PR | Sandbox |
+|---|---|---|---|---|
+| Mahjong Wild | FastAPI, engine Python asli, konfigurasi baseline + engine hash per tiket | `a19db2018013ba54fa4425b19bc9dcf0f7f2cdc3` | https://github.com/9dbit/Mahjong-legend/pull/16 | https://mahjong-agency-sandbox-production.up.railway.app |
+| Skygate 5000 | Node 24, engine asli server-side, crypto RNG dan config hash per ronde | `1af2c6de0ff6384602e14cfb45b41c3d6446104d` | https://github.com/9dbit/Skygate/pull/25 | https://skygate-agency-sandbox-production.up.railway.app/play/ |
+
+Buka game melalui tombol Play website 64COR agar token player/agen diterbitkan. Link game langsung tanpa sesi menolak akses saldo. Key HMAC terpisah per game/environment dan tidak diberikan ke browser. Kunci native UNO dipertahankan.
+
+## Presisi dan transaksi
+
+- `coin_scale` agen tidak dimigrasi; seluruh saldo existing tetap dalam satuan semula.
+- Stake dan biaya mesti tepat pada presisi agen. Mahjong skala 0 hanya menampilkan bet 1/2/5/10; Skygate menolak biaya pecahan yang tidak terwakili, termasuk booster, dan pemilih total melangkah ke nominal yang valid.
+- Payout dihitung sesudah seluruh cascade/free spins/bonus, lalu half-up satu kali ke presisi agen. Liability reserve dibulatkan ke atas. Contoh skala 0: 0.5 → 1 dan 0.49 → 0. Kebijakan ada pada informasi game; angka payout final pada UI mengikuti wallet.
+- Paytable, bobot, multiplier dan cap asli tidak diubah. Pembulatan tetap dapat memengaruhi return efektif; native sandbox tidak mengesahkan ekonomi live.
+- Intent, request ID, hasil, stake, payout dan sesi canonical disimpan SQLite FULL/WAL sebelum reserve. Retry dan worker 30 detik menggunakan hasil yang sama. Settlement server terjadi sebelum animasi. Tidak ada refund/reroll lokal setelah timeout.
+- Satu process/replica per game, volume persistent `/data`, deployment overlap 0. Tidak aman menaikkan replica SQLite ini tanpa migrasi koordinasi/storage. Pending round tidak boleh dihapus sebagai cara memperbaiki koneksi.
+
+## Bukti validasi
+
+- Mahjong: 34 Python native/math/invariant tests pass.
+- Skygate: 118 Node tests pass termasuk fault injection, presisi integer dan actual crypto-RNG engine.
+- Playground: 40 skenario integrasi pass, termasuk regresi UNO. Backend unit: 60 pass, 5 skip khusus native PostgreSQL.
+- UAT memakai frontend 64COR, tombol Play, renderer game asli pada Chromium 393×852, wallet Playground dan database PGlite terisolasi. Bridge hostname HTTPS hanya meneruskan request ke server game lokal, termasuk Origin; tidak membuat respons wallet atau hasil game palsu.
+- Mahjong: spin → restart process → retry tiket yang sama → satu ronde settled/satu journal → kembali ke 64COR dengan saldo sama.
+- Skygate: spin → restart → retry sama → BUY SPIN → Bonus Booster; tiga ronde settled, masing-masing satu settlement journal, saldo kembali ke 64COR sama.
+- Kedua tenant ledger mismatch 0. Fault tests mensimulasikan respons hilang sesudah reserve dan sesudah settlement, lalu membuka ulang database; hasil tidak dihitung ulang dan saldo tidak dibayar dua kali.
+- Release admin sekarang menolak payload slug yang berbeda dari identitas game dalam katalog, meski beberapa signing key telah aktif.
+- Bukti ringkas tanpa identitas akun: `sources/evidence/mahjong-skygate-native-2026-11-08.json`.
+
+## Aktivasi dan batas
+
+Dua service baru mempunyai volume terpisah. Playground sandbox memakai manifest `AGENCY_SANDBOX_RELEASES` dengan SHA exact, HTTPS launch URL dan bukti UAT. Manifest hanya dapat diterapkan pada schema `agency_sandbox_*`, tenant sandbox dan signing key sesuai game. Pilihan/entitlement agen tetap dihormati; deployment tidak menambah koin player atau memindahkan saldo demo.
+
+Mode live ditolak oleh runtime. Publikasi Studio lintas-service, migrasi wallet guest lama, sertifikasi RTP/ekonomi live dan pengujian beban native PostgreSQL bukan hasil yang diklaim dalam perubahan ini. Provider pembayaran/email/SMS/KYC/OAuth tetap mengikuti handoff tersendiri.
+
+Status deployment akhir dan smoke test server publik dicatat setelah verifikasi pada bagian berikut.

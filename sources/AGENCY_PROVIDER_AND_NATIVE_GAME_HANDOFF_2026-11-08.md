@@ -31,7 +31,7 @@ Referensi adapter: [Resend Send Email](https://resend.com/docs/api-reference/ema
 - Simpan request ID dan outcome di DB native sebelum request jaringan. Jika timeout: status tidak pasti; jangan mengganti round reference, menambahkan saldo lokal, atau menghitung ulang outcome.
 - Secret hanya pada server native. Frontend menerima token launch sekali pakai lewat fragment, lalu menukarkannya ke server native. Jangan memanggil HMAC endpoint dari browser.
 
-**Status lanjutan 8 November:** UNO Orbit sudah menggunakan transport ini pada jalur gameplay native, dengan outcome/phase durable, retry dan abandonment settlement. Lihat `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate belum terpasang dan tetap Maintenance; adapter transport saja tidak cukup untuk mengaktifkannya.
+**Status lanjutan 8 November:** UNO Orbit sudah menggunakan transport ini pada jalur gameplay native, dengan outcome/phase durable, retry dan abandonment settlement. Lihat `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate kini juga terpasang pada jalur gameplay native dengan bukti browser, restart dan ledger; lihat `MAHJONG_SKYGATE_NATIVE_ACTIVATION_2026-11-08.md`. Tabel temuan di bawah adalah baseline sebelum implementasi native tersebut.
 
 ## Temuan source native dan keputusan yang masih diperlukan
 

@@ -235,6 +235,8 @@ async function main() {
     PUBLIC_SITE_URL: base,
     GAMEOPS_BRIDGE_KEYS: "[]",
     AGENCY_GAME_KEYS: JSON.stringify([
+      {id:"qa-mahjong",game:"mahjong-wild",secret:gameSecret,environment:"sandbox"},
+      {id:"qa-skygate",game:"skygate-5000",secret:gameSecret,environment:"sandbox"},
       {
         id: "qa-uno",
         game: "uno-luck",
@@ -1466,6 +1468,7 @@ async function main() {
   await require("./agency-activation.cjs")({pool,req,ok,check,staff,player,topup,paid,A,B,PA,PB,creds,password,base,runtime});
   await require("./agency-adapter.cjs")({pool,runtime,check,player,A,B,topup,paid,ok,base,gameSecret});
   await require("./agency-native-release.cjs")({pool,check,runtime,A});
+  await require("./agency-native-slots.cjs")({pool,check,player,A,topup,paid,fund,password,ok,base,gameSecret});
   await require("./agency-native-uno.cjs")({pool,check,player,A,topup,paid,fund,password,ok,base,gameSecret});
   await require("./agency-email.cjs")({pool,runtime,check,player,A,password,req});
   if (process.env.AGENCY_BROWSER === "true")

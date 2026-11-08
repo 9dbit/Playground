@@ -36,6 +36,8 @@ UAT deployed melalui API storefront menggunakan satu akun sintetis sandbox (iden
 
 Mahjong/Skygate dan provider pembayaran, email delivery, SMS/KYC/OAuth tetap pekerjaan tersisa seperti dokumen handoff; tidak diklaim aktif oleh perubahan UNO ini.
 
-## Sisa integrasi native
+## Temuan sebelum integrasi Mahjong/Skygate
+
+Bagian ini adalah baseline historis; penyelesaiannya tercatat di `MAHJONG_SKYGATE_NATIVE_ACTIVATION_2026-11-08.md`.
 
 Mahjong memakai stake 0.2/0.5/1/2/5/10 dan math dengan payout Decimal hingga 12 digit; paytable scale memiliki lebih dari 12 digit. Konversi ke `coin_scale=0` milik agen tidak boleh dilakukan dengan pemotongan desimal tersembunyi. Diperlukan kontrak satuan/pembulatan yang eksplisit sebelum gameplay memakai saldo agen. Skygate masih membuat hasil di browser dengan RNG seeded: perlu dipindahkan ke server, menyimpan konfigurasi/outcome per ronde, lalu memasang settlement durable. Keduanya belum diberi status publishable.
