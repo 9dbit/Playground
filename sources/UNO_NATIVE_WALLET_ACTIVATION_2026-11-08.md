@@ -14,7 +14,7 @@ Perbaikan backend: retry reservasi yang sudah tercatat tetap mengembalikan ronde
 
 ## Validasi
 
-- UNO: 117 pytest pass; guest regression dan native fault-injection.
+- UNO: 118 pytest pass; guest regression dan native fault-injection.
 - Playground: 38 skenario pass, mencakup browser native UNO, lease/idempotency, ledger reconciliation dan sandbox release guard.
 - Backend unit: 60 pass, 5 skip khusus native PostgreSQL.
 - Browser Chromium 393×852 menjalankan server FastAPI asli, wallet pusat asli dan DB terisolasi. Server UNO direstart setelah kartu pertama; kartu kedua/ketiga tetap ronde sama, satu settlement journal, ledger difference 0.
@@ -24,10 +24,18 @@ Perbaikan backend: retry reservasi yang sudah tercatat tetap mengembalikan ronde
 ## Deployment
 
 - Source UNO: `9dbit/uno-luck`, draft PR #35.
-- Source version: `1c2251c9275b5585a01c4f92c495b0371df97099`.
+- Source version: `a46fa7b36cc54c9cba60a9361432f0ebe076d746`.
 - Service: `uno-agency-sandbox`, URL `https://uno-agency-sandbox-production.up.railway.app`.
-- Volume: `uno-agency-rounds`, `/data`, 512 MB. Image `Dockerfile.agency` menyiapkan ownership mount lalu turun permanen ke UID/GID 10001 sebelum menerima request.
+- Volume: `uno-agency-rounds`, `/data`, 512 MB. Image default `Dockerfile` (guest/sandbox mode) menyiapkan ownership mount lalu turun permanen ke UID/GID 10001 sebelum menerima request.
 - Startup dan health check memverifikasi database; nama Railway environment `production` tidak mengubah mode wallet sandbox.
 - Buka melalui tombol Play di website agen setelah release terdaftar dan entitlement dipilih. URL game langsung tanpa token tidak memberi saldo demo atau akses player.
 
-Status terminal deployment dan smoke test dicatat setelah deploy selesai. Mahjong/Skygate dan provider pembayaran, email delivery, SMS/KYC/OAuth tetap pekerjaan tersisa seperti dokumen handoff; tidak diklaim aktif oleh perubahan UNO ini.
+Deployment UNO `e8f12939-d983-4472-9fe1-f039f1f81da7` sudah SUCCESS. Health publik HTTP 200 menampilkan `wallet=playground`, `mode=sandbox`, `database=connected`, dan source commit di atas. `/api/agency/state` tanpa launch menolak 401; endpoint wallet guest menolak 403. Katalog storefront deployed 64COR menampilkan UNO `Active/publishable`; Mahjong/Skygate masih `Maintenance/registered`.
+
+UAT deployed melalui API storefront menggunakan satu akun sintetis sandbox (identitas akun tidak dimuat dalam dokumen publik): registrasi → launch → native redeem → state wallet berhasil, saldo/reserved nol, daily/refill nonaktif. Tidak ada deposit, withdraw atau paid round pada akun deployed tersebut. Bukti: `sources/evidence/uno-native-deployed-2026-11-08.json`. Browser berbayar simulasi dijalankan pada DB terisolasi; storefront 64COR asli → tombol Play → native tiga kartu → kembali ke website dengan saldo pusat yang sama. Bridge hostname HTTPS pada harness meneruskan seluruh request ke FastAPI lokal, tanpa mengganti respons game atau wallet.
+
+Mahjong/Skygate dan provider pembayaran, email delivery, SMS/KYC/OAuth tetap pekerjaan tersisa seperti dokumen handoff; tidak diklaim aktif oleh perubahan UNO ini.
+
+## Sisa integrasi native
+
+Mahjong memakai stake 0.2/0.5/1/2/5/10 dan math dengan payout Decimal hingga 12 digit; paytable scale memiliki lebih dari 12 digit. Konversi ke `coin_scale=0` milik agen tidak boleh dilakukan dengan pemotongan desimal tersembunyi. Diperlukan kontrak satuan/pembulatan yang eksplisit sebelum gameplay memakai saldo agen. Skygate masih membuat hasil di browser dengan RNG seeded: perlu dipindahkan ke server, menyimpan konfigurasi/outcome per ronde, lalu memasang settlement durable. Keduanya belum diberi status publishable.

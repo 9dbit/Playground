@@ -1,8 +1,8 @@
 {
   "mode": "postgresql-wasm",
   "productionContacted": false,
-  "startedAt": "2026-11-08T06:10:01.079Z",
-  "completedAt": "2026-11-08T06:10:25.868Z",
+  "startedAt": "2026-11-08T06:23:07.402Z",
+  "completedAt": "2026-11-08T06:23:37.859Z",
   "failures": [],
   "checks": [
     {
@@ -45,11 +45,11 @@
         "stake": "25",
         "payout": "50",
         "balance": "1025",
-        "centralRound": "85d5f3f5-1ae4-46bf-93d8-317f500002e6",
         "settlementJournals": 1,
         "ledgerDifferences": 0,
         "environment": "isolated sandbox",
-        "productionContacted": false
+        "productionContacted": false,
+        "storefrontLaunchAndReturn": true
       }
     }
   ],

@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-11-08T06:24:51.186552+00:00",
+  "environment": "sandbox",
+  "source_commit": "a46fa7b36cc54c9cba60a9361432f0ebe076d746",
+  "native_health": "database connected",
+  "storefront_catalog": "Active/publishable",
+  "launch": "64COR player API \u2192 native redeem \u2192 central wallet status",
+  "player_purpose": "Synthetic sandbox UAT account; identifiers omitted; zero coins; no deposit/withdraw or paid round",
+  "balance": 0,
+  "reserved": 0,
+  "native_sessions": "HttpOnly cookie received",
+  "moneyTransferred": false,
+  "nativeRoundBrowserUAT": "separate disposable local test"
+}

@@ -28,7 +28,7 @@ Bonus adalah grant koin tetap, **tanpa wagering, free spins, cashback, komisi re
 
 ## Batas yang belum selesai / belum aktif
 
-1. **UNO native wallet sandbox telah diimplementasikan dan diuji melalui game asli.** Detail dan deployment pada `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate masih memerlukan penggantian local ledger/client math serta UAT native; tetap Maintenance/registered. UNO belum diaktifkan untuk ekonomi live.
+1. **UNO native wallet sandbox telah diimplementasikan, diuji dari storefront sampai game asli, dan deployed SUCCESS.** Detail dan deployment pada `UNO_NATIVE_WALLET_ACTIVATION_2026-11-08.md`. Mahjong dan Skygate masih memerlukan penggantian local ledger/client math serta UAT native; tetap Maintenance/registered. UNO belum diaktifkan untuk ekonomi live.
 2. **Gateway pembayaran nyata belum diintegrasikan.** Belum ada provider/account/key di Railway. Seluruh cashier yang diuji tetap simulator; SHARED/SPLIT, approval, saldo dan reversal simulator tidak membuktikan UAT bank.
 3. **Email adapter siap dikonfigurasi, delivery nyata belum diuji.** Tidak ada secret/domain pengirim. Status accepted bukan delivered; receipts webhook belum tersedia.
 4. **SMS, KYC, Google/Apple OAuth belum diimplementasikan/diaktifkan.** Provider/account/callback dan aturan verifikasi belum dipilih. Tidak memberi badge Verified palsu.
